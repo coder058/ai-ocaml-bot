@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import talib
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research"))
-from murphy_analysis import CANDLES, analyze_frame, contiguous, enrich, geometry, pivots, forward_reading
+from murphy_analysis import CANDLES, analyze_frame, contiguous, enrich, geometry, pivots, forward_reading, swing_divergences
 
 
 def fixture(count=150):
@@ -23,6 +23,46 @@ def fixture(count=150):
 
 
 class MurphyTests(unittest.TestCase):
+    def test_double_top_and_head_shoulders_require_actual_neckline_close(self):
+        # SOURCE: hand-constructed OHLC paths with confirmed peaks and troughs.
+        def path(closes):
+            rows, _ = fixture(len(closes))
+            return [{**row, "o": close, "h": close + .5, "l": close - .5, "c": close}
+                    for row, close in zip(rows, closes, strict=True)]
+        double = path([10,11,12,15,12,11,9,11,12,15,12,8,7])
+        self.assertIn("double_top_neckline_break", geometry(double)["chartShapes"])
+        no_break = [{**r, "o": 10, "c": 10, "h": 10.5, "l": 9.5} if i >= 11 else r for i, r in enumerate(double)]
+        self.assertNotIn("double_top_neckline_break", geometry(no_break)["chartShapes"])
+        head = path([10,11,12,15,12,11,9,11,13,18,13,11,9,11,12,15,12,8,7])
+        self.assertIn("head_shoulders_neckline_break", geometry(head)["chartShapes"])
+        # SOURCE: exact price reflection reverses peaks/troughs for inverse fixtures.
+        def reflection(rows):
+            return [{**r, "o":30-r["o"], "c":30-r["c"], "h":30-r["l"], "l":30-r["h"]} for r in rows]
+        self.assertIn("double_bottom_neckline_break", geometry(reflection(double))["chartShapes"])
+        self.assertIn("inverse_head_shoulders_neckline_break", geometry(reflection(head))["chartShapes"])
+
+    def test_divergence_is_known_only_after_confirming_candle_close(self):
+        closes = [10,11,12,15,12,11,9,11,13,18,13,11,10]
+        rows, _ = fixture(len(closes))
+        rows = [{**r, "o":c, "c":c, "h":c+.5, "l":c-.5} for r,c in zip(rows,closes,strict=True)]
+        oscillator = np.array([5.] * len(rows))
+        oscillator[3], oscillator[9] = 8, 6
+        before = swing_divergences(rows[:11], {"MACD": oscillator[:11]}, 1)
+        self.assertEqual(before, [])
+        after = swing_divergences(rows[:12], {"MACD": oscillator[:12]}, 1)
+        self.assertEqual(len(after), 1)
+        self.assertEqual(after[0]["direction"], "bearish")
+        self.assertEqual(after[0]["confirmationCloseAt"], rows[12]["t"])
+        self.assertEqual(swing_divergences(rows, {"MACD": oscillator}, 1), after)
+        reflected = [{**r, "o":30-r["o"], "c":30-r["c"], "h":30-r["l"], "l":30-r["h"]} for r in rows]
+        bullish = swing_divergences(reflected, {"MACD": -oscillator}, 1)
+        self.assertEqual(bullish[0]["direction"], "bullish")
+        oscillator[9] = 10
+        self.assertEqual(swing_divergences(rows, {"MACD": oscillator}, 1), [])
+        oscillator[9] = np.nan
+        self.assertEqual(swing_divergences(rows, {"MACD": oscillator}, 1), [])
+        with self.assertRaises(ValueError): swing_divergences(rows, {"MACD": oscillator[:-1]}, 1)
+
     def test_every_catalog_pattern_matches_installed_c_library(self):
         rows, as_of = fixture()
         reading = analyze_frame(rows, 1, as_of)
@@ -83,6 +123,12 @@ class MurphyTests(unittest.TestCase):
         self.assertEqual(suite["murphy"][-1]["status"], "partial")
         self.assertFalse(result["technicalCoverage"]["completeMurphyBook"])
         self.assertFalse(result["technicalCoverage"]["orderAuthority"])
+        short_result = {"asOf": as_of, "markets": [{"venue": "fixture", "frames": {"1m": {"trend": "warming"}}}]}
+        enrich(short_result, [{"frames": {"1m": rows[-2:]}}], {"1m": 1})
+        short_laws = short_result["markets"][0]["frames"]["1m"]["technicalSuite"]["murphy"]
+        self.assertEqual(short_laws[5]["status"], "warming")
+        self.assertEqual(short_laws[7]["status"], "warming")
+        self.assertEqual(short_laws[6]["evidence"]["RSI"]["status"], "warming")
 
     def test_forward_evidence_retains_actual_features_without_repeated_chart_history(self):
         rows, as_of = fixture()

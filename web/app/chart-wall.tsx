@@ -18,6 +18,8 @@ function evidenceText(value: unknown): string {
   if (typeof value === "number") return number(value);
   if (typeof value === "string") return value.replaceAll("_", " ");
   if (Array.isArray(value)) return value.length ? value.map(item => {
+    if (item && typeof item === "object" && "oscillator" in item && "direction" in item)
+      return `${item.oscillator} ${item.direction}: price ${number(item.fromPrice)} → ${number(item.toPrice)}, momentum ${number(item.fromValue)} → ${number(item.toValue)}; confirmation close ${item.confirmationCloseAt}; evaluated ${item.evaluatedAsOf}`;
     if (item && typeof item === "object" && "ratio" in item && "price" in item)
       return `${number(Number(item.ratio) * 100)}%: ${number(Number(item.price))}`;
     if (item && typeof item === "object" && "fromPrice" in item && "toPrice" in item)
@@ -26,6 +28,7 @@ function evidenceText(value: unknown): string {
   }).join(" · ") : "No confirmed geometry";
   if (typeof value === "object") {
     const entries = Object.entries(value);
+    if (!entries.length) return "Unavailable";
     if (entries.length === 1 && entries[0][0] === "real") return evidenceText(entries[0][1]);
     if ("trend" in value && "status" in value) return `${evidenceText(value.trend)} (${evidenceText(value.status)})`;
     return entries.map(([key, item]) => `${key.replaceAll("_", " ")}: ${evidenceText(item)}`).join(" · ");
@@ -148,7 +151,7 @@ function Evidence({ suite, pipeline }: { suite: TechnicalSuite | undefined; pipe
     {tab === "Murphy" && <div className="murphy-laws">{suite.murphy?.map(law => <article key={law.law}>
       <header><strong>{law.law}. {law.name}</strong><span>{law.status}</span></header>
       <dl>{Object.entries(law.evidence).map(([key, value]) => <div key={key}><dt>{key === key.toUpperCase() ? key.replaceAll("_", " ") : key.replace(/([a-z])([A-Z])/g, "$1 $2")}</dt><dd>{evidenceText(value)}</dd></div>)}</dl>
-    </article>)}<p className="analysis-limit">Descriptive checklist. Weekly/monthly context, verified divergences and consolidated volume/open interest are incomplete.</p></div>}
+    </article>)}<p className="analysis-limit">Descriptive checklist. Swing divergences are exploratory warnings, not trade probabilities. Weekly/monthly context and consolidated volume/open interest remain incomplete.</p></div>}
     {tab === "Candlesticks" && <><label className="pattern-toggle"><input type="checkbox" checked={allPatterns} onChange={e => setAllPatterns(e.target.checked)} /> Show every catalog pattern</label>
       <p>TA-Lib signed pattern codes are detections, not confidence or win probabilities.</p>
       <div className="pattern-list">{catalog?.patternCatalog.filter(p => allPatterns || !!suite.patterns[p.code]?.value).map(p => {

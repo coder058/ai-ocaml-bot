@@ -168,6 +168,43 @@ def geometry(rows):
             "calibrated": False, "pivotRadius": PIVOT_RADIUS, "levelTolerance": LEVEL_TOLERANCE}
 
 
+def swing_divergences(rows, series, minutes):
+    """Exploratory regular divergence at the latest confirmed price swing pair.
+
+    SOURCE: StockCharts/Murphy regular divergence definition, higher price high
+    with lower momentum or lower price low with higher momentum:
+    https://articles.stockcharts.com/article/stockcharts-insider-john-murphys-law-8-know-the-warning-signs-macd/
+    GUESS: # UNCALIBRATED GUESS — use the existing two-bar price pivot heuristic
+    and sample the oscillator at those price pivots (not independent oscillator
+    pivots). No divergence strength threshold, price target or trading authority.
+    """
+    events = []
+    points = pivots(rows)
+    for kind in ("low", "high"):
+        side = [p for p in points if p["kind"] == kind]
+        if len(side) < 2:
+            continue
+        a, b = side[-2:]
+        for name, values in series.items():
+            if len(values) != len(rows):
+                raise ValueError("Oscillator series must align to actual candles")
+            prior, current = scalar(values[a["index"]]), scalar(values[b["index"]])
+            if prior is None or current is None:
+                continue
+            bullish = kind == "low" and b["price"] < a["price"] and current > prior
+            bearish = kind == "high" and b["price"] > a["price"] and current < prior
+            if bullish or bearish:
+                # SOURCE: confirmation requires the right-hand candle to close;
+                # its start timestamp alone is not the time the warning was known.
+                available = datetime.fromtimestamp(timestamp({"t": b["confirmedAt"]}) + minutes * 60, timezone.utc)
+                events.append({"oscillator": name, "direction": "bullish" if bullish else "bearish",
+                    "from": a["time"], "to": b["time"], "fromPrice": a["price"], "toPrice": b["price"],
+                    "fromValue": prior, "toValue": current, "confirmedBar": b["confirmedAt"],
+                    "confirmationCloseAt": available.isoformat().replace("+00:00", "Z"),
+                    "calibrated": False, "orderAuthority": False})
+    return events
+
+
 def analyze_frame(rows, minutes, as_of, expected_starts=()):
     tail = contiguous(rows, minutes, as_of, expected_starts)
     if not tail:
@@ -175,7 +212,7 @@ def analyze_frame(rows, minutes, as_of, expected_starts=()):
                 "patterns": {}, "indicators": {}, "patternEvents": [], "orderAuthority": False}
     inputs = {name: np.asarray([r[key] for r in tail], dtype=np.float64)
               for name, key in (("open", "o"), ("high", "h"), ("low", "l"), ("close", "c"), ("volume", "v"))}
-    patterns, events, indicators = {}, [], {}
+    patterns, events, indicators, divergence_series = {}, [], {}, {}
     # SOURCE: contiguous() validates every historical row. Keep actual chart
     # history across gaps, but never bridge those gaps for indicator warmup.
     displayed = [{"t": row["t"], **{k: float(row[k]) for k in ("o", "h", "l", "c", "v")}}
@@ -204,6 +241,12 @@ def analyze_frame(rows, minutes, as_of, expected_starts=()):
             continue
         values = function(inputs)
         arrays = values if isinstance(values, (list, tuple)) else [values]
+        # SOURCE: preserve the causal TA-Lib RSI and MACD line series for
+        # descriptive comparisons at confirmed price pivots; no order policy.
+        if name == "RSI":
+            divergence_series["RSI"] = arrays[0]
+        if name == "MACD":
+            divergence_series["MACD"] = arrays[0]
         latest = {output: scalar(array[-1]) for output, array in zip(function.output_names, arrays, strict=True)}
         indicators[name] = {"status": "ready" if all(v is not None for v in latest.values()) else "unavailable",
                             "values": latest, "parameters": dict(function.parameters)}
@@ -215,6 +258,7 @@ def analyze_frame(rows, minutes, as_of, expected_starts=()):
     return {"status": "ready", "bars": displayed, "contiguousBars": len(tail),
             "patterns": patterns, "patternEvents": events, "indicators": indicators,
             "geometry": geometry(tail), "overlays": overlays,
+            "divergences": swing_divergences(tail, divergence_series, minutes),
             "patternCount": len(CANDLES), "indicatorCount": len(FUNCTIONS),
             "source": f"TA-Lib {talib.__version__} C via Python", "orderAuthority": False,
             "winProbability": None}
@@ -231,12 +275,21 @@ def enrich(result, requested, frame_minutes):
                 extension = {"status": "invalid", "reason": str(error), "bars": [],
                              "patterns": {}, "indicators": {}, "patternEvents": [], "orderAuthority": False}
             reading["technicalSuite"] = extension
+            for warning in extension.get("divergences", []):
+                # SOURCE: historical confirmation and current evaluation are
+                # different timestamps. Forward journal observedAt records receipt.
+                warning["evaluatedAsOf"] = result["asOf"]
         for frame, reading in market["frames"].items():
             suite = reading["technicalSuite"]
             geometry_values = suite.get("geometry", {})
             indicators = suite.get("indicators", {})
             def values(name):
-                return indicators.get(name, {}).get("values", {})
+                row = indicators.get(name, {})
+                return {"status": row.get("status", "unavailable"), "values": row.get("values", {}),
+                        **({"requiredBars": row["requiredBars"]} if "requiredBars" in row else {})}
+            def indicator_status(*names):
+                states = [indicators.get(name, {}).get("status", "unavailable") for name in names]
+                return "descriptive" if all(s == "ready" for s in states) else "warming" if "warming" in states else "unavailable"
             def law(index, status, evidence):
                 return {"law": index, "name": LAW_NAMES[index-1], "status": status, "evidence": evidence}
             aligned = {key: {"trend": r.get("trend"), "status": r.get("status"), "bar": r.get("lastBarStart")}
@@ -244,14 +297,17 @@ def enrich(result, requested, frame_minutes):
             available = "descriptive" if suite.get("status") == "ready" else "unavailable"
             suite["murphy"] = [
                 law(1, "partial", {"frames": aligned, "missing": "Monthly/weekly primary trend history"}),
-                law(2, available, {"trend": reading.get("trend"), "structure": reading.get("structure")}),
-                law(3, available, {"support": geometry_values.get("support"), "resistance": geometry_values.get("resistance")}),
-                law(4, available, {"retracements": geometry_values.get("retracements", [])}),
-                law(5, "heuristic" if available == "descriptive" else available, {"trendlines": geometry_values.get("trendlines", [])}),
-                law(6, available, {"ema20": reading.get("ema20"), "ema50": reading.get("ema50")}),
-                law(7, available, {"RSI": values("RSI"), "STOCH": values("STOCH"), "WILLR": values("WILLR"), "CCI": values("CCI")}),
-                law(8, available, {"MACD": values("MACD"), "divergence": "Not a verified swing-divergence detector"}),
-                law(9, available, {"ADX": values("ADX"), "PLUS_DI": values("PLUS_DI"), "MINUS_DI": values("MINUS_DI")}),
+                law(2, "warming" if reading.get("trend") == "warming" else available, {"trend": reading.get("trend"), "structure": reading.get("structure")}),
+                law(3, available if geometry_values.get("support") is not None or geometry_values.get("resistance") is not None else "waiting_swings",
+                    {"support": geometry_values.get("support"), "resistance": geometry_values.get("resistance")}),
+                law(4, available if geometry_values.get("retracements") else "waiting_swings", {"retracements": geometry_values.get("retracements", [])}),
+                law(5, "heuristic" if geometry_values.get("trendlines") else "waiting_swings", {"trendlines": geometry_values.get("trendlines", [])}),
+                law(6, "descriptive" if reading.get("ema20") is not None and reading.get("ema50") is not None else "warming",
+                    {"ema20": reading.get("ema20"), "ema50": reading.get("ema50")}),
+                law(7, indicator_status("RSI", "STOCH", "WILLR", "CCI"), {"RSI": values("RSI"), "STOCH": values("STOCH"), "WILLR": values("WILLR"), "CCI": values("CCI")}),
+                law(8, indicator_status("MACD"), {"MACD": values("MACD"), "divergences": suite.get("divergences", []),
+                    "method": "Exploratory RSI/MACD at confirmed price swings; no independently matched oscillator pivots or strategy validation"}),
+                law(9, indicator_status("ADX", "PLUS_DI", "MINUS_DI"), {"ADX": values("ADX"), "PLUS_DI": values("PLUS_DI"), "MINUS_DI": values("MINUS_DI")}),
                 law(10, "partial" if available == "descriptive" else available,
                     {"OBV": values("OBV"), "AD": values("AD"), "MFI": values("MFI"),
                      "volumeScope": market["venue"], "openInterest": None,
@@ -265,7 +321,7 @@ def enrich(result, requested, frame_minutes):
         "murphyLaws": list(LAW_NAMES), "source": f"TA-Lib {talib.__version__} C via Python + shared OCaml",
         "displayBars": DISPLAY_BARS, "seedBars": required_seed_bars(), "orderAuthority": False,
         "completeMurphyBook": False,
-        "remaining": ["Weekly/monthly primary trends", "Verified momentum divergences",
+        "remaining": ["Weekly/monthly primary trends", "Strategy validation and independent momentum-pivot divergences",
             "Full reversal/continuation formation library", "Elliott wave, time-cycle interpretation",
             "Point-and-figure analysis", "Market breadth / intermarket confirmation",
             "Consolidated volume and open interest", "Strategy validation and probabilities"],
@@ -287,6 +343,7 @@ def forward_reading(reading):
                             for name, row in suite.get("indicators", {}).items()},
         "geometry": {key: geometry_values.get(key) for key in
                      ("support", "resistance", "retracements", "trendlines", "chartShapes")},
+        "divergences": suite.get("divergences", []),
         "orderAuthority": False, "winProbability": None,
     }
     return compact
