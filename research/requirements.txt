@@ -1,0 +1,2 @@
+# SOURCE: websockets 15.0.1 on PyPI; isolated read-only capture runtime.
+websockets==15.0.1

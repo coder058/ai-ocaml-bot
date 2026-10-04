@@ -1,0 +1,22 @@
+[Unit]
+Description=OCaml multi-frame Alpaca crypto paper experiment
+After=network-online.target ai-ocaml-market-pipeline.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=TZ=UTC
+Environment=PAPER_STATE_DIR=/home/ubuntu/jsbot-paper-state
+Environment=MULTI_PAPER_ORDERS=0
+EnvironmentFile=/etc/jsbot-paper.env
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/_build/default/bin/multi_paper_main.exe --execute
+# GUESS: # UNCALIBRATED GUESS — bound one serialized OMS scan at a minute.
+# A killed POST retains its durable pending client ID for reconciliation.
+TimeoutStartSec=60
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state

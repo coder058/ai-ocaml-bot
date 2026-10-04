@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh read-only crypto candle research every minute
+
+[Timer]
+# SOURCE: one minute is the shortest user-requested analysis timeframe.
+OnCalendar=*-*-* *:*:00 UTC
+Persistent=true
+Unit=ai-ocaml-multi-timeframe-shadow.service
+
+[Install]
+WantedBy=timers.target

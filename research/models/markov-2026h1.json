@@ -1,0 +1,303 @@
+{
+  "historicalRetrievedAt": "2026-09-27T08:12:02.483234+00:00",
+  "kind": "read_only_markov_candle_shadow_v1",
+  "limitation": "Historical bars were retrieved after the period and may be revised; probabilities are descriptive next-midpoint-close rates, without executable costs or calibration.",
+  "source": "https://data.alpaca.markets/v1beta3/crypto/us/bars",
+  "states": {
+    "falling|down|Bearish engulfing": {
+      "total": 1022,
+      "up": 559
+    },
+    "falling|down|Doji": {
+      "total": 1127,
+      "up": 590
+    },
+    "falling|down|Doji,Bearish engulfing": {
+      "total": 7,
+      "up": 4
+    },
+    "falling|down|Doji,Hammer shape": {
+      "total": 30,
+      "up": 13
+    },
+    "falling|down|Doji,Hammer shape,Bearish engulfing": {
+      "total": 1,
+      "up": 1
+    },
+    "falling|down|Doji,Shooting-star shape": {
+      "total": 136,
+      "up": 80
+    },
+    "falling|down|Doji,Shooting-star shape,Bearish engulfing": {
+      "total": 10,
+      "up": 7
+    },
+    "falling|down|Hammer shape": {
+      "total": 372,
+      "up": 195
+    },
+    "falling|down|Hammer shape,Bearish engulfing": {
+      "total": 19,
+      "up": 10
+    },
+    "falling|down|Shooting-star shape": {
+      "total": 696,
+      "up": 381
+    },
+    "falling|down|Shooting-star shape,Bearish engulfing": {
+      "total": 58,
+      "up": 28
+    },
+    "falling|down|none": {
+      "total": 6982,
+      "up": 3726
+    },
+    "falling|up|Bullish engulfing": {
+      "total": 678,
+      "up": 332
+    },
+    "falling|up|Doji": {
+      "total": 1111,
+      "up": 572
+    },
+    "falling|up|Doji,Bullish engulfing": {
+      "total": 5,
+      "up": 1
+    },
+    "falling|up|Doji,Hammer shape": {
+      "total": 40,
+      "up": 17
+    },
+    "falling|up|Doji,Hammer shape,Bullish engulfing": {
+      "total": 1,
+      "up": 1
+    },
+    "falling|up|Doji,Shooting-star shape": {
+      "total": 81,
+      "up": 39
+    },
+    "falling|up|Doji,Shooting-star shape,Bullish engulfing": {
+      "total": 9,
+      "up": 7
+    },
+    "falling|up|Hammer shape": {
+      "total": 331,
+      "up": 157
+    },
+    "falling|up|Hammer shape,Bullish engulfing": {
+      "total": 19,
+      "up": 6
+    },
+    "falling|up|Shooting-star shape": {
+      "total": 449,
+      "up": 238
+    },
+    "falling|up|Shooting-star shape,Bullish engulfing": {
+      "total": 35,
+      "up": 22
+    },
+    "falling|up|none": {
+      "total": 4582,
+      "up": 2325
+    },
+    "mixed_or_warming|down|Bearish engulfing": {
+      "total": 796,
+      "up": 397
+    },
+    "mixed_or_warming|down|Doji": {
+      "total": 1047,
+      "up": 524
+    },
+    "mixed_or_warming|down|Doji,Bearish engulfing": {
+      "total": 3,
+      "up": 3
+    },
+    "mixed_or_warming|down|Doji,Hammer shape": {
+      "total": 39,
+      "up": 14
+    },
+    "mixed_or_warming|down|Doji,Shooting-star shape": {
+      "total": 84,
+      "up": 47
+    },
+    "mixed_or_warming|down|Doji,Shooting-star shape,Bearish engulfing": {
+      "total": 1,
+      "up": 0
+    },
+    "mixed_or_warming|down|Hammer shape": {
+      "total": 363,
+      "up": 168
+    },
+    "mixed_or_warming|down|Hammer shape,Bearish engulfing": {
+      "total": 15,
+      "up": 4
+    },
+    "mixed_or_warming|down|Shooting-star shape": {
+      "total": 519,
+      "up": 311
+    },
+    "mixed_or_warming|down|Shooting-star shape,Bearish engulfing": {
+      "total": 19,
+      "up": 13
+    },
+    "mixed_or_warming|down|none": {
+      "total": 5695,
+      "up": 2964
+    },
+    "mixed_or_warming|flat|Doji": {
+      "total": 2,
+      "up": 1
+    },
+    "mixed_or_warming|flat|none": {
+      "total": 2,
+      "up": 2
+    },
+    "mixed_or_warming|up|Bullish engulfing": {
+      "total": 864,
+      "up": 399
+    },
+    "mixed_or_warming|up|Doji": {
+      "total": 1045,
+      "up": 514
+    },
+    "mixed_or_warming|up|Doji,Bullish engulfing": {
+      "total": 7,
+      "up": 5
+    },
+    "mixed_or_warming|up|Doji,Hammer shape": {
+      "total": 59,
+      "up": 20
+    },
+    "mixed_or_warming|up|Doji,Hammer shape,Bullish engulfing": {
+      "total": 2,
+      "up": 2
+    },
+    "mixed_or_warming|up|Doji,Shooting-star shape": {
+      "total": 64,
+      "up": 35
+    },
+    "mixed_or_warming|up|Doji,Shooting-star shape,Bullish engulfing": {
+      "total": 5,
+      "up": 2
+    },
+    "mixed_or_warming|up|Hammer shape": {
+      "total": 449,
+      "up": 190
+    },
+    "mixed_or_warming|up|Hammer shape,Bullish engulfing": {
+      "total": 13,
+      "up": 8
+    },
+    "mixed_or_warming|up|Shooting-star shape": {
+      "total": 433,
+      "up": 227
+    },
+    "mixed_or_warming|up|Shooting-star shape,Bullish engulfing": {
+      "total": 35,
+      "up": 21
+    },
+    "mixed_or_warming|up|none": {
+      "total": 5822,
+      "up": 2833
+    },
+    "rising|down|Bearish engulfing": {
+      "total": 732,
+      "up": 375
+    },
+    "rising|down|Doji": {
+      "total": 1054,
+      "up": 501
+    },
+    "rising|down|Doji,Bearish engulfing": {
+      "total": 8,
+      "up": 5
+    },
+    "rising|down|Doji,Hammer shape": {
+      "total": 35,
+      "up": 20
+    },
+    "rising|down|Doji,Hammer shape,Bearish engulfing": {
+      "total": 2,
+      "up": 2
+    },
+    "rising|down|Doji,Shooting-star shape": {
+      "total": 64,
+      "up": 42
+    },
+    "rising|down|Doji,Shooting-star shape,Bearish engulfing": {
+      "total": 7,
+      "up": 3
+    },
+    "rising|down|Hammer shape": {
+      "total": 317,
+      "up": 135
+    },
+    "rising|down|Hammer shape,Bearish engulfing": {
+      "total": 24,
+      "up": 9
+    },
+    "rising|down|Shooting-star shape": {
+      "total": 426,
+      "up": 248
+    },
+    "rising|down|Shooting-star shape,Bearish engulfing": {
+      "total": 24,
+      "up": 14
+    },
+    "rising|down|none": {
+      "total": 4318,
+      "up": 2103
+    },
+    "rising|up|Bullish engulfing": {
+      "total": 992,
+      "up": 477
+    },
+    "rising|up|Doji": {
+      "total": 1172,
+      "up": 573
+    },
+    "rising|up|Doji,Bullish engulfing": {
+      "total": 12,
+      "up": 7
+    },
+    "rising|up|Doji,Hammer shape": {
+      "total": 81,
+      "up": 35
+    },
+    "rising|up|Doji,Hammer shape,Bullish engulfing": {
+      "total": 1,
+      "up": 1
+    },
+    "rising|up|Doji,Shooting-star shape": {
+      "total": 55,
+      "up": 28
+    },
+    "rising|up|Doji,Shooting-star shape,Bullish engulfing": {
+      "total": 4,
+      "up": 1
+    },
+    "rising|up|Hammer shape": {
+      "total": 567,
+      "up": 248
+    },
+    "rising|up|Hammer shape,Bullish engulfing": {
+      "total": 24,
+      "up": 14
+    },
+    "rising|up|Shooting-star shape": {
+      "total": 456,
+      "up": 223
+    },
+    "rising|up|Shooting-star shape,Bullish engulfing": {
+      "total": 35,
+      "up": 18
+    },
+    "rising|up|none": {
+      "total": 6476,
+      "up": 2917
+    }
+  },
+  "trainingCutoffExclusive": "2026-07-01T00:00:00+00:00",
+  "trainingLabels": 52070,
+  "trainingUp": 26014
+}

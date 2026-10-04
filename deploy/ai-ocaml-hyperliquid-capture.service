@@ -1,0 +1,21 @@
+[Unit]
+Description=Archive public Hyperliquid HIP-3 market data for read-only research
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/.venv/bin/python /home/ubuntu/ocaml-paper-market-lab/research/hyperliquid_capture.py
+Restart=on-failure
+# GUESS: # UNCALIBRATED GUESS — retry transport failures after five seconds.
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state/hyperliquid-capture
+
+[Install]
+WantedBy=multi-user.target

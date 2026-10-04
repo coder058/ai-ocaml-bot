@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh shared OCaml market analysis on the requested minute cadence
+
+[Timer]
+# SOURCE: smallest user-requested frame is 1m; native slower frames use their own cached cadence.
+OnCalendar=*-*-* *:*:00
+Persistent=true
+Unit=ai-ocaml-market-pipeline.service
+
+[Install]
+WantedBy=timers.target

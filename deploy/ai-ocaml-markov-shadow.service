@@ -1,0 +1,15 @@
+[Unit]
+Description=Record read-only forward Markov candle predictions
+After=network-online.target ai-ocaml-five-minute-bars.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab/research
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/.venv/bin/python /home/ubuntu/ocaml-paper-market-lab/research/markov_shadow.py /home/ubuntu/jsbot-paper-state/five-minute-bars.json /home/ubuntu/ocaml-paper-market-lab/research/models/markov-2026h1.json /home/ubuntu/jsbot-paper-state/markov-shadow.jsonl
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state

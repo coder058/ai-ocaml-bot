@@ -1,0 +1,23 @@
+[Unit]
+Description=Capture Alpaca crypto market events for paper research
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/.venv/bin/python /home/ubuntu/ocaml-paper-market-lab/research/stream_capture.py
+Restart=on-failure
+# SOURCE: systemd RestartPreventExitStatus suppresses retry of EX_CONFIG.
+RestartPreventExitStatus=78
+# GUESS: # UNCALIBRATED GUESS — reconnect after five seconds; inspect outages.
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state
+
+[Install]
+WantedBy=multi-user.target

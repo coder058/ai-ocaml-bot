@@ -1,0 +1,17 @@
+[Unit]
+Description=Publish signed AI OCaml Bot paper monitor snapshot
+After=network-online.target jsbot-paper.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/ai-ocaml-monitor.env
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/usr/bin/python3 /home/ubuntu/ocaml-paper-market-lab/deploy/export_telemetry.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state
+

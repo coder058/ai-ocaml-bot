@@ -1,0 +1,29 @@
+(test
+ (name test_alpaca_http)
+ (modules test_alpaca_http)
+ (libraries paper_market unix))
+
+(test
+ (name test_paper_crypto)
+ (modules test_paper_crypto)
+ (libraries paper_market))
+
+(test
+ (name test_pattern_forge)
+ (modules test_pattern_forge)
+ (libraries paper_market))
+
+(test
+ (name test_technical)
+ (modules test_technical)
+ (libraries paper_market))
+
+(test
+ (name test_frame_analysis)
+ (modules test_frame_analysis)
+ (libraries paper_market unix))
+
+(test
+ (name test_multi_paper)
+ (modules test_multi_paper)
+ (libraries paper_market unix))

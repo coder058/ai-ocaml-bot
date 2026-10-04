@@ -1,0 +1,25 @@
+[Unit]
+Description=Read-only OCaml consumer of the Alpaca paper market stream
+After=network-online.target ai-ocaml-market-capture.service
+Wants=network-online.target ai-ocaml-market-capture.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+Environment=PAPER_STATE_DIR=/home/ubuntu/jsbot-hot-shadow
+Environment=TZ=UTC
+EnvironmentFile=-/etc/jsbot-paper.env
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/_build/default/bin/paper_crypto_main.exe --hot-stream
+Restart=on-failure
+# GUESS: # UNCALIBRATED GUESS — wait five seconds after a feed-integrity halt;
+# tune from observed recovery incidents before moving orders to this feed.
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-hot-shadow /home/ubuntu/jsbot-paper-state
+
+[Install]
+WantedBy=multi-user.target

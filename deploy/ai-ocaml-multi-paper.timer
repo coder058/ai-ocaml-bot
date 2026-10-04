@@ -1,0 +1,12 @@
+[Unit]
+Description=Serialized multi-frame paper lifecycle checks
+
+[Timer]
+# GUESS: # UNCALIBRATED GUESS — check local stops/positions every 15 seconds.
+# This is a paper experiment's operational cadence, not an HFT latency claim.
+OnCalendar=*-*-* *:*:00,15,30,45
+Persistent=true
+Unit=ai-ocaml-multi-paper.service
+
+[Install]
+WantedBy=timers.target

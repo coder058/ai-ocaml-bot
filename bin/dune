@@ -1,0 +1,19 @@
+(executable
+ (name paper_crypto_main)
+ (modules paper_crypto_main)
+ (libraries paper_market yojson unix))
+
+(executable
+ (name stream_probe)
+ (modules stream_probe)
+ (libraries yojson unix))
+
+(executable
+ (name analyze_frames_main)
+ (modules analyze_frames_main)
+ (libraries paper_market yojson unix))
+
+(executable
+ (name multi_paper_main)
+ (modules multi_paper_main)
+ (libraries paper_market yojson unix))

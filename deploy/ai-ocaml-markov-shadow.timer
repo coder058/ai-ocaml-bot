@@ -1,0 +1,15 @@
+[Unit]
+Description=Check for a new closed BTC five-minute bar for forward shadow scoring
+
+[Timer]
+# GUESS: # UNCALIBRATED GUESS — start two minutes after boot to allow the
+# existing bar refresher to populate its snapshot.
+OnBootSec=2min
+# GUESS: # UNCALIBRATED GUESS — one-minute checks reduce missed five-minute
+# snapshots; tune from observed snapshot retrieval cadence.
+OnUnitActiveSec=1min
+Persistent=true
+Unit=ai-ocaml-markov-shadow.service
+
+[Install]
+WantedBy=timers.target

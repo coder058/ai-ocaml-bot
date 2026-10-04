@@ -1,0 +1,7 @@
+_build/
+.paper-state/
+.env
+.env.*
+*.opam
+__pycache__/
+.local/

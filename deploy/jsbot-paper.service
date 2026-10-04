@@ -1,0 +1,25 @@
+[Unit]
+Description=OCaml Alpaca paper market lab
+After=network-online.target ai-ocaml-market-capture.service
+Wants=network-online.target ai-ocaml-market-capture.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+Environment=PAPER_STATE_DIR=/home/ubuntu/jsbot-paper-state
+Environment=TZ=UTC
+EnvironmentFile=-/etc/jsbot-paper.env
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/_build/default/bin/paper_crypto_main.exe --paper --hot-stream
+Restart=on-failure
+# GUESS: 5 seconds is an operational retry delay; use incident data to tune it.
+# UNCALIBRATED GUESS
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state
+
+[Install]
+WantedBy=multi-user.target
