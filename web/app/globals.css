@@ -1493,3 +1493,19 @@ footer {
     overflow-wrap: anywhere;
   }
 }
+
+/* GUESS: # UNCALIBRATED GUESS — layout dimensions only, no trading parameters. */
+.positions-reset { max-width: 1280px; margin: 0 auto; padding: 24px; }
+.positions-reset .topbar { padding-bottom: 20px; }
+.positions-reset .brand-mark { padding: 10px; }
+.positions-reset .monitor-meta { margin: 30px 0 24px; align-items: center; }
+.positions-reset h1 { margin: 0 0 6px; font-size: 30px; }
+.positions-reset .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.reset-badge { color: var(--muted); border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px; }
+@media (max-width: 640px) {
+  .positions-reset { padding: 16px; }
+  .positions-reset .monitor-meta { display: block; }
+  .positions-reset .snapshot-time { text-align: left; margin-top: 16px; }
+  .positions-reset .metric-grid { grid-template-columns: 1fr; }
+  .reset-badge { font-size: 11px; }
+}

@@ -48,3 +48,11 @@ order sizing, and account credentials were unchanged.
 ## Current desk
 
 See [the trading desk guide](TRADING-DESK.md) and [4 October connection evidence](CONNECTIONS-AND-MONITOR-WORK.md). The P&L curve records actual snapshots while the local API is polled. Its local file survives a restart, but no observations are fabricated while the monitor is closed.
+
+## Positions-only reset (2026-10-04)
+
+The current monitor displays only bot-owned open broker positions, current exposure and unrealized P&L. Past orders, fills, closed trades, realized P&L and the historical performance curve are removed from the UI and `/api/live` response. History CSV exports return HTTP 410. This supersedes the history UI described earlier in this document.
+
+The original complete `.local/telemetry.json`, performance journal and Dublin broker/OMS journals remain intact for reconciliation and auditing. The display reset does not reset the broker account, change strategies, submit/cancel orders or close positions. Each refreshed full snapshot is projected to the same positions-only response; a restart or synchronization cannot restore the history view.
+
+Verified: 25 web tests, TypeScript check and production build passed. Local HTTP response retained BTC/USD and SOL/USD inventory, omitted historical arrays and performance, and the export endpoint returned 410. Browser verification confirmed only the current positions view.
