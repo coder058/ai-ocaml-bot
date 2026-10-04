@@ -899,7 +899,7 @@ export default function Home() {
                 </div>
                 <div className="table-scroll history-table">
                   <ClosedCards
-                    rows={closed.slice(0, RECENT_CLOSURES)}
+                    rows={(ledger?.closed ?? []).slice(0, RECENT_CLOSURES)}
                     onInspect={(id) => {
                       setSelectedId(id);
                       switchView("Orders & fills");
@@ -917,29 +917,31 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody>
-                      {closed.slice(0, RECENT_CLOSURES).map((c) => (
-                        <tr key={c.id}>
-                          <th>{c.symbol}</th>
-                          <td>{fullTime(c.exitAt)}</td>
-                          <td>{quantity(c.quantity)}</td>
-                          <td>
-                            {price(c.entryPrice)} → {price(c.exitPrice)}
-                          </td>
-                          <td className={tone(c.grossPnl)}>
-                            {signedMoney(c.grossPnl, 4)}
-                          </td>
-                          <td>
-                            <button
-                              onClick={() => {
-                                setSelectedId(c.exitOrderId);
-                                switchView("Orders & fills");
-                              }}
-                            >
-                              Why it exited
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {(ledger?.closed ?? [])
+                        .slice(0, RECENT_CLOSURES)
+                        .map((c) => (
+                          <tr key={c.id}>
+                            <th>{c.symbol}</th>
+                            <td>{fullTime(c.exitAt)}</td>
+                            <td>{quantity(c.quantity)}</td>
+                            <td>
+                              {price(c.entryPrice)} → {price(c.exitPrice)}
+                            </td>
+                            <td className={tone(c.grossPnl)}>
+                              {signedMoney(c.grossPnl, 4)}
+                            </td>
+                            <td>
+                              <button
+                                onClick={() => {
+                                  setSelectedId(c.exitOrderId);
+                                  switchView("Orders & fills");
+                                }}
+                              >
+                                Why it exited
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>

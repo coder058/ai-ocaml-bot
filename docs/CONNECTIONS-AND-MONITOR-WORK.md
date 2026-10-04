@@ -86,3 +86,6 @@ Conventional FX is not connected to a broker. The practice-only data connector a
 1. Supply an eligible OANDA v20 practice account/token through the secure VPS installer (no secret in chat). Verify the real FX catalog/pricing/candles and complete the FX order/ownership/reconciliation adapter before claiming FX execution.
 2. During the next regular stock session, verify real stock quote/bar events and the explicit paper route with broker outcomes. Connected Sunday transport and synthetic execution tests do not prove a stock fill.
 3. Strategy development follows this task: chronological point-in-time evaluation, explicit recorded candidate policies, calibrated risk/probability decisions only when supported. The current BTC rule remains uncalibrated and new ETH/SOL confluence entries remain paused.
+
+- The overview now always shows the latest global matched closures; history filters remain scoped to their history views. This prevents an earlier SOL-only history filter from silently hiding all overview closures.
+- Sixteen exporter tests passed on Dublin after the collector-name mapping fix. Actual collector health was true; the service remained active throughout.
