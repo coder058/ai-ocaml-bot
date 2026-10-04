@@ -23,8 +23,10 @@ if (-not $SkipBuild) {
 & $pythonExecutable $syncScript
 if ($LASTEXITCODE -ne 0) { throw 'Initial SSH snapshot failed.' }
 $previousFileSetting = $env:AI_OCAML_MONITOR_TELEMETRY_FILE
+$previousOperationalSetting = $env:AI_OCAML_MONITOR_OPERATIONAL_FILE
 try {
     $env:AI_OCAML_MONITOR_TELEMETRY_FILE = Join-Path $localState 'telemetry.json'
+    $env:AI_OCAML_MONITOR_OPERATIONAL_FILE = Join-Path $localState 'operational.json'
     $webProcess = Start-Process -FilePath $nodeExecutable -ArgumentList @(
         ('"{0}"' -f $nextCli), 'start', '--hostname', '127.0.0.1', '--port', $monitorPort
     ) -WorkingDirectory $webRoot -WindowStyle Hidden -PassThru `
@@ -48,5 +50,6 @@ try {
     }
 } finally {
     $env:AI_OCAML_MONITOR_TELEMETRY_FILE = $previousFileSetting
+    $env:AI_OCAML_MONITOR_OPERATIONAL_FILE = $previousOperationalSetting
 }
-Write-Output 'Monitor started at http://127.0.0.1:3000. Broker fetches repeat after a 60-second pause while this computer is on.'
+Write-Output 'Monitor started at http://127.0.0.1:3000. File-backed analysis refreshes after a 15-second pause; broker fetches after a 60-second pause while this computer is on.'

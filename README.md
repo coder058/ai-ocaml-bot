@@ -159,7 +159,7 @@ capture and the deployed paper service continue independently. See the
 Run `deploy/start_local_monitor.ps1` from PowerShell. It builds the web app,
 fetches the public broker projection through the existing Dublin SSH connection,
 and starts the monitor at **http://127.0.0.1:3000**. The SSH refresh worker runs
-after each broker fetch plus a 60-second pause while this computer is on. Alpaca credentials stay on Dublin;
+after each broker fetch plus a 60-second pause while this computer is on. A separate compressed SSH worker reads file-backed analysis/OMS status after a 15-second pause without broker calls. Analysis and broker reception timestamps stay distinct. Alpaca credentials stay on Dublin;
 the web app reads `.local/telemetry.json` and disables its Blob ingestion route.
 No Vercel plan or Blob storage is required for this local mode.
 

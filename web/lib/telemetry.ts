@@ -108,10 +108,12 @@ export type MarketPipeline = {
 export type PaperTelemetry = {
   version: 1;
   generatedAt: string;
+  positionsReceivedAt?: string;
   source: "Dublin OCaml paper service";
   connections?: {
     stockAuto?: {
       asOf: string;
+      winProbability: null;
       mode: "OBSERVE" | "PAPER_EXPERIMENT";
       automaticStrategy: boolean;
       newEntriesEnabled: boolean;
@@ -247,7 +249,12 @@ export async function getTelemetry(): Promise<PaperTelemetry | null> {
       const data: unknown = JSON.parse(await readFile(localFile, "utf8"));
       // SOURCE: local mode uses the SSH-synchronized public projection only;
       // a missing or invalid local snapshot must not fall back to Blob.
-      return isTelemetry(data) ? data : null;
+      if (!isTelemetry(data)) return null;
+      const operationalFile = process.env.AI_OCAML_MONITOR_OPERATIONAL_FILE;
+      if (!operationalFile) return data;
+      try {
+        return mergeOperational(data, JSON.parse(await readFile(operationalFile, "utf8")));
+      } catch { return data; } // Preserve original timestamps when the fast path fails.
     }
     const blob = await get("telemetry/latest.json", {
       access: "private",
@@ -261,4 +268,26 @@ export async function getTelemetry(): Promise<PaperTelemetry | null> {
   } catch {
     return null;
   }
+}
+
+// This projection is file-backed analysis/OMS health, never a broker snapshot.
+export function mergeOperational(broker: PaperTelemetry, value: unknown): PaperTelemetry {
+  if (!value || typeof value !== "object") return broker;
+  const ops = value as Partial<PaperTelemetry>;
+  const at = Date.parse(ops.generatedAt ?? "");
+  if (ops.version !== 1 || ops.source !== broker.source || !Number.isFinite(at) ||
+      at < Date.parse(broker.generatedAt) || at > Date.now()) return broker;
+  if (ops.marketPipeline) {
+    const policy = ops.marketPipeline as MarketPipeline & { orderAuthority?: boolean; winProbability?: unknown };
+    if (policy.orderAuthority !== false || policy.winProbability !== null) return broker;
+  }
+  if (ops.marketPipeline && (!Array.isArray(ops.marketPipeline.markets) || ops.marketPipeline.markets.some(m => m.symbol === "AAPL" ||
+      !m.frames || Object.values(m.frames).some(r => !r || r.orderAuthority !== false || r.winProbability !== null)))) return broker;
+  if (ops.multiPaper && (ops.multiPaper.calibrated !== false || ops.multiPaper.winProbability !== null || !Array.isArray(ops.multiPaper.activeTickets))) return broker;
+  if (ops.connections && typeof ops.connections !== "object") return broker;
+  const auto = ops.connections?.stockAuto;
+  if (auto && (auto.winProbability !== null || !Array.isArray(auto.ownedPositions) || auto.ownedPositions.some(p => !p || p.symbol === "AAPL"))) return broker;
+  // Explicit whitelist: faster status cannot overwrite prices, positions,
+  // fills, decision history, completeness flags or their original timestamps.
+  return { ...broker, marketPipeline: ops.marketPipeline, multiPaper: ops.multiPaper, connections: ops.connections };
 }

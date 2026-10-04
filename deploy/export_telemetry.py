@@ -646,11 +646,30 @@ def market_research_state(path: Path = SHADOW_PATH) -> dict | None:
             "orderAuthority": False, "winProbability": None}
 
 
+def operational_snapshot() -> dict:
+    """Current file-backed analysis/OMS health; no credential or broker request.
+
+    Full broker histories remain a separately synchronized audit. This path
+    cannot acknowledge orders or update broker positions with a newer timestamp.
+    """
+    document={"version":1,"source":"Dublin OCaml paper service",
+        "generatedAt":datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
+        "connections":connection_state()}
+    for name,filename in (("marketPipeline","market-pipeline.json"),("multiPaper","multi-paper.json")):
+        try:
+            document[name]=json.loads((STATE_DIR/filename).read_text())
+        except (OSError,ValueError):
+            document[name+"Error"]="File-backed analysis/OMS status unavailable"
+    return document
+
+
 def snapshot(credentials: dict[str, str], service: dict[str, object],
              events: list[dict[str, str]], journal_complete: bool,
              decision_events: list[dict[str, str]], *,
              cache_fees: bool = False) -> dict[str, object]:
     positions = paper_get("/v2/positions", credentials)
+    # SOURCE: actual response receipt, not the later completion of pagination.
+    positions_received_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
     orders, orders_complete, crypto_orders_attributable = broker_orders(credentials)
     owned_symbols = {"BTC/USD"} | {public_symbol(order.get("symbol"))
         for order in orders if lab_order(order.get("clientOrderId"), order.get("symbol"))}
@@ -667,6 +686,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "capture": capture_state(service),
         "analysis": analysis_state(events),
         "positions": public_positions(positions, owned_symbols),
+        "positionsReceivedAt":positions_received_at,
         "orders": orders,
         "ordersComplete": orders_complete,
         "fills": fills,

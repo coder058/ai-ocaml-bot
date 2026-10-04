@@ -2,7 +2,7 @@
 
 ## Active follow-up window
 
-User requested six more hours on 2026-10-04. Follow-up scheduled every 30 minutes until 2026-10-05T00:29:46Z. This is an opportunity to continue work, not evidence of six hours of active development. Work inline, no subagents. Do not modify unrelated dirty files or Frankfurt/Fly Brain.
+User extended the request to at least eight hours starting 2026-10-04T19:36:49Z and inline continuation until engineering readiness. The minimum boundary is 2026-10-05T03:36:49Z, a readiness review rather than automatic completion. Follow-up scheduling is a backup, not evidence of active development. See EXECUTION-TRACE-WORK.md for actual subsequent work. Work inline, no subagents. Preserve unrelated dirty files and Frankfurt/Fly Brain.
 
 ## Completed and verified so far
 
@@ -29,7 +29,7 @@ User requested six more hours on 2026-10-04. Follow-up scheduled every 30 minute
    `research/forward_pattern_audit.py` now provides first-observed gross movement labels with a frozen 21:00 UTC discovery/validation boundary. Run it at each follow-up using the exact command in `docs/FORWARD-PATTERN-AUDIT.md`; retain this attempt and report validation counts honestly. It has no execution/cost model and cannot authorize a policy.
 7. Expand public market universe only from verified catalog; crypto trading stays BTC/ETH/SOL, Hyperliquid mainnet data-only, no real-money wallet, no invented spot FX. OANDA spot practice credentials missing; adapter unavailable.
 8. Preserve hardcoded Alpaca paper endpoint, AAPL protection, durable pending-order reconciliation, $100 baseline and $500 BTC ceiling. Deploy a policy only if measured evidence justifies the engineering change; no forced trades to inflate counts.
-9. At deadline delete automation `ai-ocaml-bot-seis-horas-de-an-lisis-y-gr-ficos`, report actual completed work and remaining limits. No promise of profit or breakthrough.
+9. At the minimum eight-hour boundary review actual readiness and remaining work. Delete automation `ai-ocaml-bot-seis-horas-de-an-lisis-y-gr-ficos` only on engineering readiness or when no independent useful work remains without missing external input. Do not claim hours worked, profit or breakthrough from elapsed time.
 
 ## Additional measured evidence
 

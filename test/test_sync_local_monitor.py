@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy"))
-from sync_local_monitor import fetch_snapshot, validate_snapshot  # noqa: E402
+from sync_local_monitor import fetch_snapshot, validate_snapshot, fetch_operational, validate_operational  # noqa: E402
 
 
 def document() -> dict:
@@ -21,6 +21,26 @@ def document() -> dict:
 
 
 class LocalSyncTests(unittest.TestCase):
+    def test_operational_transport_is_compressed_file_reads_only_and_preserves_last_good_file(self):
+        data={"version":1,"source":"Dublin OCaml paper service","generatedAt":"2026-10-04T20:00:00Z",
+            "connections":{},"marketPipeline":{"orderAuthority":False,"winProbability":None,"markets":[]}}
+        with tempfile.TemporaryDirectory() as directory:
+            output=Path(directory)/"operational.json"
+            with patch("sync_local_monitor.subprocess.run",return_value=subprocess.CompletedProcess([],0,json.dumps(data).encode(),b"")) as run:
+                fetch_operational(output,"known-host",Path("private-key"))
+            self.assertEqual(json.loads(output.read_text()),data)
+            self.assertIn("-C",run.call_args.args[0])
+            remote=run.call_args.kwargs["input"].decode()
+            self.assertIn("operational_snapshot()",remote)
+            self.assertNotIn("read_env",remote);self.assertNotIn(".snapshot(",remote)
+            previous=output.read_bytes()
+            with patch("sync_local_monitor.subprocess.run",return_value=subprocess.CompletedProcess([],1,b"",b"PRIVATE ERROR")):
+                with self.assertRaises(RuntimeError):fetch_operational(output,"known-host",Path("private-key"))
+            self.assertEqual(output.read_bytes(),previous)
+        self.assertEqual(validate_operational(data),data)
+        for extra in ({"orders":[]},{"positions":[]},{"marketPipeline":{"orderAuthority":True,"markets":[]}},
+                      {"connections":{"stockAuto":{"winProbability":None,"ownedPositions":[{"symbol":"AAPL"}]}}}):
+            with self.assertRaises(ValueError):validate_operational({**data,**extra})
     def test_stock_projection_requires_exact_owned_scope_and_excludes_aapl(self):
         data=document();data['orders']=[{'symbol':'QQQ','clientOrderId':'aibotstkExample'}]
         data['positions']=[{'symbol':'QQQ'}];self.assertEqual(validate_snapshot(data),data)

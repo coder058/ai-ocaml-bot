@@ -14,7 +14,7 @@ export function positionsView(t: PaperTelemetry | null): PositionsView | null {
   if (!t) return null;
   const owned = new Set(["BTC/USD", ...botOrders(t).map(o => marketSymbol(o.symbol))]);
   return {
-    generatedAt: t.generatedAt,
+    generatedAt: t.positionsReceivedAt ?? t.generatedAt,
     source: t.source,
     service: { ...t.service },
     positions: t.positions.filter(p => !p.protected && owned.has(marketSymbol(p.symbol)))

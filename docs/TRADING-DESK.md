@@ -72,6 +72,13 @@ The collector waits 60 seconds after each completed broker fetch; API polling
 every 15 seconds does not make the broker history instantaneous. A two-minute
 staleness warning is an **uncalibrated operational choice**.
 
+A separate compressed SSH worker reads file-backed analysis and OMS status
+after a 15-second pause, independent of the full broker pagination. It makes
+no broker/API calls. A newer operational timestamp never replaces broker
+positions, fills, order evidence or their reception timestamps. Failed syncs
+retain the previous file with its original timestamps. Inventory freshness
+uses the actual position-response receipt, before later history downloads.
+
 ## Public examples consulted
 
 The information layout was informed by the public feature descriptions of

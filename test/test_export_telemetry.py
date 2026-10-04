@@ -22,11 +22,22 @@ from export_telemetry import (  # noqa: E402
     public_positions,
     multi_order_evidence,
     stock_order_evidence,
+    operational_snapshot,
     service_state,
 )
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_operational_path_reads_status_files_without_credentials_or_broker_queries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            (root/"market-pipeline.json").write_text(json.dumps({"asOf":"synthetic","orderAuthority":False,"winProbability":None,"markets":[]}))
+            (root/"multi-paper.json").write_text(json.dumps({"asOf":"synthetic","activeTickets":[]}))
+            with patch("export_telemetry.STATE_DIR",root),patch("export_telemetry.read_env",side_effect=AssertionError("credential read")),patch("export_telemetry.paper_get",side_effect=AssertionError("broker query")):
+                result=operational_snapshot()
+            self.assertFalse(result["marketPipeline"]["orderAuthority"])
+            self.assertNotIn("positions",result);self.assertNotIn("orders",result)
+            self.assertNotIn("fills",result);self.assertNotIn("journal",result)
     def test_auto_stock_evidence_retains_actual_preflight_without_private_fields(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/"stock-events.jsonl"

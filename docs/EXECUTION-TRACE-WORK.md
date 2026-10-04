@@ -31,7 +31,7 @@ Readiness means a tested and understandable engineering system, not profitabilit
 
 ## Next required verification
 
-The monitor has 455 chart previews and full TA-Lib/Murphy detail, but no visible per-frame execution trace yet. Next milestone is truthful coverage and a new decision cohort, then a tested stock automation path. Broker history reset must remain preserved.
+The monitor now has 455 chart previews, descriptive TA-Lib/Murphy detail and a per-frame execution trace. The stock scheduler is tested and installed in observation. Next work is execution-aware prospective evaluation and actual daily/weekly primary-trend context; observation is not verified stock execution. Broker history reset remains preserved.
 
 ## 2026-10-04: execution trace milestone
 
@@ -51,3 +51,12 @@ The monitor has 455 chart previews and full TA-Lib/Murphy detail, but no visible
 - Verification on Dublin: OCaml build and dune tests passed; all five stock frame boundaries checked; 18 real-binary synthetic tests passed (eight scheduler + ten existing router); 17 exporter tests passed locally and on system Python. Frontend 35 tests and final production build/typecheck passed after correcting an optional-status TypeScript guard.
 - Actual deployment: backed up the known stock unit and replaced its check-only entry point with the scheduler in OBSERVE, supplying no --execute. Service succeeded at 20:24:54 UTC, minute timer active, session closed, new entries false, zero candidates/router invocations and no owned stock positions. This is not a live-market stock fill verification.
 - Previous monitor commit d6f6e02 passed both public CI jobs in run 37231097355. Next: browser verification of the scheduler route projection, scoped commit/CI, and execution-aware prospective research. Automatic stock entries remain unarmed; their local stops cannot protect overnight gaps. No missing FX credentials or Hyperliquid signer was invented.
+
+## Operational freshness milestone — 20:52 UTC
+
+- Full broker snapshots were completing about 84–95 seconds apart in the actual helper log; file-backed minute analysis sometimes crossed its existing 120-second freshness gate while waiting for history pagination. Kept the gate and separated a compressed, read-only operational SSH worker from the full broker collector.
+- Actual fast fetch: 23,276,650 uncompressed JSON bytes in 5.28 seconds. Two subsequent worker records were about 21 seconds apart (fetch time plus the configured 15-second pause). These are individual transport measurements, not HFT or a guaranteed latency bound.
+- Analysis now merges only marketPipeline, multiPaper and connection health. Broker positions, fills, order identities, evidence and snapshot timestamps cannot be overwritten by that fast path. Added actual positionsReceivedAt before history downloads; the UI uses it for inventory freshness.
+- Verification: 36 frontend tests, production build/typecheck, 18 exporter tests locally and on Dublin, seven synchronization tests passed. First remote unittest module invocation failed because the deployed test directory is not an importable package; direct script execution passed. No secret or dependency changes.
+- Installed the scoped exporter, restarted only verified local helper/Next PIDs, and verified the browser: 91/455 matrix, five separate BTC routes, ten paused crypto-entry routes, 345 stock observation routes and 95 public-only HIP-3 routes. Analysis 20:51:00 / receipt 20:51:32 remained distinct from inventory receipt 20:51:12. Real missing/stale/warming bars still display as such.
+- Stock scheduler commit 36bb7db passed both public CI jobs in run 37232797303. Stocks remain unarmed pending executable-policy evidence; Sunday cannot prove a regular-session fill. Primary daily/weekly context is not yet implemented.

@@ -17,4 +17,6 @@ test("positions-only reset preserves inventory and never exposes past history", 
   // A subsequent complete sync cannot restore old history to the public response.
   assert.deepEqual(positionsView({ ...raw, journal: [...raw.journal, { message: "new reason" }] }), view);
   assert.equal(positionsView(null), null);
+  const receivedAt = "2026-10-04T15:59:30Z";
+  assert.equal(positionsView({ ...raw, positionsReceivedAt: receivedAt }).generatedAt, receivedAt);
 });
