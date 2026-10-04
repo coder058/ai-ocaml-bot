@@ -176,6 +176,10 @@ def analyze_frame(rows, minutes, as_of, expected_starts=()):
     inputs = {name: np.asarray([r[key] for r in tail], dtype=np.float64)
               for name, key in (("open", "o"), ("high", "h"), ("low", "l"), ("close", "c"), ("volume", "v"))}
     patterns, events, indicators = {}, [], {}
+    # SOURCE: contiguous() validates every historical row. Keep actual chart
+    # history across gaps, but never bridge those gaps for indicator warmup.
+    displayed = [{"t": row["t"], **{k: float(row[k]) for k in ("o", "h", "l", "c", "v")}}
+                 for row in rows[-DISPLAY_BARS:]]
     chart_start = max(0, len(tail) - DISPLAY_BARS)
     for name, function in CANDLES.items():
         needed = function.lookback + 1
@@ -206,8 +210,9 @@ def analyze_frame(rows, minutes, as_of, expected_starts=()):
     overlays = {}
     for period in EMA_WINDOWS:
         values = talib.EMA(inputs["close"], timeperiod=period)
-        overlays[f"EMA{period}"] = [scalar(v) for v in values[chart_start:]]
-    return {"status": "ready", "bars": tail[chart_start:], "contiguousBars": len(tail),
+        by_time = {row["t"]: scalar(value) for row, value in zip(tail, values, strict=True)}
+        overlays[f"EMA{period}"] = [by_time.get(row["t"]) for row in displayed]
+    return {"status": "ready", "bars": displayed, "contiguousBars": len(tail),
             "patterns": patterns, "patternEvents": events, "indicators": indicators,
             "geometry": geometry(tail), "overlays": overlays,
             "patternCount": len(CANDLES), "indicatorCount": len(FUNCTIONS),

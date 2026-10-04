@@ -46,3 +46,9 @@ User requested six more hours on 2026-10-04. Follow-up scheduled every 30 minute
 - Historical SIP entitlement tested read-only for sparse FX ETF charts, using end at least 15 minutes old as Alpaca's Market Data FAQ specifies. Actual 2026-10-01 onward response counts: 1m FXA 29, FXB 18, FXC 69; 5m FXA 27, FXB 17, FXC 52. These are sparse trade bars, not a continuous spot-FX feed. No main cache/feed changed; no missing minute candles invented. Next work should separate chart history from contiguous indicator warmup, and keep IEX/SIP provenance explicit instead of mixing volume streams.
 - Browser expansion verified on desktop and normal 561px viewport. Normal layout uses horizontal frame strips, no page overflow. All 455 chart cards remain accessible; expanded dialog shows ten Murphy panels, 61 catalog rows, 113 indicator rows and true OHLCV readout. Saved proof .local/murphy-eur-chart.png.
 - The current full market projection measured 16.94 MB / 2.31 s locally. Further reduction should be driven by measured client memory and latency, not guessed performance claims.
+
+## Gap correction verified at 19:07 UTC
+
+- Seven Murphy tests passed on Dublin. Chart history now preserves actual earlier candles across missing bars; indicators, geometry and pattern warmup still use only the latest contiguous segment. Earlier EMA entries remain null and no synthetic candles are inserted.
+- Production scan at 19:05 UTC completed in 37.10 seconds with no retrieval errors. BTC 1m displayed 120 actual bars but only seven consecutive bars; ETH 1m/5m had one. This is a real data limitation, not 120 usable indicator observations.
+- Local production build passed and the monitor was restarted. Browser verified BTC 1m: 120 actual candles, eight consecutive observations on the subsequent scan, visible data-gap warning, and unavailable EMA50. Broker history remains hidden.

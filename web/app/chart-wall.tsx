@@ -134,6 +134,7 @@ function LargeChart({ suite, title }: { suite: TechnicalSuite | undefined; title
   return <><div className="chart-study-controls"><label><input type="checkbox" checked={markersVisible} onChange={e => setMarkersVisible(e.target.checked)} /> Pattern dots</label><label><input type="checkbox" checked={fib} onChange={e => setFib(e.target.checked)} /> Retracement levels</label></div>
     <div className="large-market-chart" ref={container} role="img" aria-label={`${title} interactive candlestick chart`}>{!suite?.bars.length && <p className="empty">No actual closed candles available.</p>}</div>
     {current && <div className="candle-readout"><strong>{current.t.replace("T", " ")}</strong><span>O {number(current.o)} · H {number(current.h)} · L {number(current.l)} · C {number(current.c)} · V {number(current.v)}</span><span>{currentPatterns.join(" · ") || "No pattern on this candle"}</span></div>}
+    {suite && suite.contiguousBars != null && suite.contiguousBars < suite.bars.length && <p className="analysis-limit">Data gaps: the chart keeps actual earlier candles; indicators and pattern warmup use only the latest {suite.contiguousBars} consecutive bars.</p>}
   </>;
 }
 

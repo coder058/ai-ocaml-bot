@@ -61,6 +61,17 @@ class MurphyTests(unittest.TestCase):
         last_confirm = rows[-1]["t"]
         self.assertTrue(all(p["confirmedAt"] <= last_confirm for p in geometry(rows)["pivots"]))
 
+    def test_chart_keeps_real_history_across_gap_without_bridging_indicator_warmup(self):
+        rows, as_of = fixture()
+        gapped = rows[:-3] + rows[-2:]
+        suite = analyze_frame(gapped, 1, as_of)
+        self.assertEqual(suite["contiguousBars"], 2)
+        self.assertGreater(len(suite["bars"]), suite["contiguousBars"])
+        self.assertNotIn(rows[-3]["t"], [b["t"] for b in suite["bars"]])
+        self.assertTrue(all(v is None for v in suite["overlays"]["EMA50"]))
+        self.assertIsNone(suite["patterns"]["CDLHAMMER"]["value"])
+        self.assertEqual(len(suite["overlays"]["EMA20"]), len(suite["bars"]))
+
     def test_murphy_coverage_keeps_missing_inputs_explicit(self):
         rows, as_of = fixture()
         result = {"asOf": as_of, "markets": [{"venue": "Alpaca crypto", "frames": {
