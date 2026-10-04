@@ -22,3 +22,8 @@
  (name stock_paper_main)
  (modules stock_paper_main)
  (libraries paper_market yojson unix))
+
+(executable
+ (name stock_auto_main)
+ (modules stock_auto_main)
+ (libraries paper_market yojson unix))

@@ -110,6 +110,18 @@ export type PaperTelemetry = {
   generatedAt: string;
   source: "Dublin OCaml paper service";
   connections?: {
+    stockAuto?: {
+      asOf: string;
+      mode: "OBSERVE" | "PAPER_EXPERIMENT";
+      automaticStrategy: boolean;
+      newEntriesEnabled: boolean;
+      sessionOpen: boolean;
+      eligibleLongSignals: number;
+      routerInvocations: number;
+      ownedPositions: { symbol: string; quantity: string; managed: boolean; pending: boolean; frame: string | null }[];
+      abstentions: { symbol: string; reason: string }[];
+      stopHandling: string;
+    };
     stocks?: {
       asOf: string;
       connected: boolean;

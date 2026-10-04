@@ -35,7 +35,16 @@ function routeFor(t: PaperTelemetry, symbol: string, venue: string, now: number)
   }
   if (venue === "Alpaca equities") {
     const stocks = t.connections?.stocks;
-    if (!fresh(stocks?.asOf, now)) return { name: "Runtime unverified", reason: "Stock connection status is absent, stale or future-dated." };
+    if (!stocks || !fresh(stocks.asOf, now)) return { name: "Runtime unverified", reason: "Stock connection status is absent, stale or future-dated." };
+    const auto = t.connections?.stockAuto;
+    if (auto) {
+      if (!fresh(auto.asOf, now)) return { name: "Runtime unverified", reason: "Stock scheduler status is stale or future-dated." };
+      if (auto.automaticStrategy && (auto.mode !== "PAPER_EXPERIMENT" || !auto.newEntriesEnabled))
+        return { name: "Stock policy in observation", reason: `The automatic stock scheduler is installed, but its new-order route is disabled.${!stocks.sessionOpen ? ` Session closed; next open ${stocks.nextOpen}.` : ""} ${auto.stopHandling}` };
+      if (!stocks.sessionOpen) return { name: "Stock session closed", reason: `Next regular session: ${stocks.nextOpen}. No after-hours queue.` };
+      if (auto.automaticStrategy && auto.newEntriesEnabled && stocks.connected && stocks.accountReady && stocks.executionGateArmed && stocks.canSubmitNow)
+        return { name: "Paper entry gate enabled", reason: "The automatic stock runtime reports an enabled route; actual ownership, fresh IEX quotes and per-order preflight are still required." };
+    }
     if (!stocks?.automaticStrategy) return { name: "Stock automation missing", reason: `The stock router accepts explicit requests only.${stocks?.sessionOpen === false ? ` Session closed; next open ${stocks.nextOpen}.` : ""}` };
     if (!stocks.sessionOpen) return { name: "Stock session closed", reason: `Next regular session: ${stocks.nextOpen}. No after-hours queue.` };
     if (!stocks.connected || !stocks.accountReady || !stocks.executionGateArmed || !stocks.canSubmitNow)
@@ -55,6 +64,8 @@ function rowFor(t: PaperTelemetry, market: NonNullable<PaperTelemetry["marketPip
   const ticket = t.multiPaper?.activeTickets.find(ticket => canonical(ticket.symbol) === canonical(market.symbol));
   const runtimeFresh = fresh(t.multiPaper?.asOf, now);
   const runtimeReason = runtimeFresh ? t.multiPaper?.abstentions.filter(a => a.symbol === "all" || canonical(a.symbol) === canonical(market.symbol)).map(a => a.reason).join("; ") : "";
+  const stockOwned = market.venue === "Alpaca equities" && fresh(t.connections?.stockAuto?.asOf, now)
+    ? t.connections?.stockAuto?.ownedPositions?.find(p => p.symbol === market.symbol) : null;
   const policy = t.marketPipeline?.policy;
   const steps: TraceStep[] = [
     { stage: "Closed candles", state: !pipelineFresh ? "unknown" : !r || ["invalid", "no_data", "stale"].includes(r.status) ? "blocked" : "observed",
@@ -63,9 +74,9 @@ function rowFor(t: PaperTelemetry, market: NonNullable<PaperTelemetry["marketPip
       detail: suite ? `${patterns.filter(p => p.status === "ready").length}/${patterns.length} candlestick functions ready; ${indicators.filter(i => i.status === "ready").length}/${indicators.length} indicator functions ready. Suite ${suite.status}. Detection does not imply a trade.` : "Technical-suite evidence unavailable." },
     { stage: "Frozen OCaml policy", state: !pipelineFresh ? "unknown" : policy !== "trend_candle_confluence_v1" ? "unknown" : r?.candidate ? "observed" : "blocked",
       detail: policy !== "trend_candle_confluence_v1" ? `Unrecognized policy ${policy ?? "missing"}; no rule is inferred.` : `Trend ${r?.trend ?? "unknown"}; shapes ${(r?.candleShapes ?? []).join(", ") || "none"}; candidate ${r?.candidate ?? "none"}; invalidation ${r?.invalidationLevel ?? "none"}. Rule: fresh, warmed, open session, rising + bullish engulfing/hammer, or falling + bearish engulfing/shooting star. This is an uncalibrated exploratory rule; the full TA-Lib catalog does not drive entries.` },
-    { stage: "Execution route", state: route.name === "Paper entry gate enabled" ? "observed" : "blocked", detail: route.reason },
-    { stage: "Risk / ownership", state: ticket && runtimeFresh ? "blocked" : "unknown",
-      detail: ticket && runtimeFresh ? `An existing owned ticket on ${ticket.symbol}/${ticket.frame} blocks another entry for this instrument.${ticket.pending ? ` Pending ${ticket.pending.side} must reconcile first.` : ""}` : "This chart audit does not perform broker account, buying-power, open-order, executable-quote or ownership preflight. No pass is inferred." },
+    { stage: "Execution route", state: route.name === "Paper entry gate enabled" && r?.candidate !== "short" ? "observed" : "blocked", detail: `${route.reason}${r?.candidate === "short" && ["Alpaca equities", "Alpaca crypto"].includes(market.venue) ? " The multiframe policy supports long entries only; this short candidate cannot submit an entry." : ""}` },
+    { stage: "Risk / ownership", state: ticket && runtimeFresh || stockOwned ? "blocked" : "unknown",
+      detail: stockOwned ? `Owned stock quantity ${stockOwned.quantity}; managed origin ${stockOwned.frame ?? "unavailable"}.${stockOwned.pending ? " Pending stock order must reconcile." : ""} One position per instrument blocks further entries; manual positions are not adopted.` : ticket && runtimeFresh ? `An existing owned ticket on ${ticket.symbol}/${ticket.frame} blocks another entry for this instrument.${ticket.pending ? ` Pending ${ticket.pending.side} must reconcile first.` : ""}` : "This chart audit does not perform broker account, buying-power, open-order, executable-quote or ownership preflight. No pass is inferred." },
     { stage: "Broker acknowledgement", state: "context", detail: "Chart candidates have no order authority. Only an exact durable client ID joined to an actual broker order proves submission; see the new order cohort below." },
   ];
   if (runtimeReason && market.venue === "Alpaca crypto" && canonical(market.symbol) !== "BTC/USD")
@@ -75,7 +86,7 @@ function rowFor(t: PaperTelemetry, market: NonNullable<PaperTelemetry["marketPip
     candidate: pipelineFresh ? r?.candidate ?? null : null, route: route.name, routeReason: route.reason, steps };
 }
 
-const EVIDENCE_FIELDS = ["policy", "reason", "frame", "signal_bar", "observedAt", "quote_time", "trigger_quote_time", "reference_quote_time", "reference_bid", "reference_ask", "current_bid", "current_ask", "trigger_move_bps", "trigger_bid", "trigger_ask", "invalidation_level", "ema20", "ema50", "rsi14", "macd", "macd_signal", "trend", "candle_shapes", "bar_close"];
+const EVIDENCE_FIELDS = ["policy", "reason", "frame", "signal_bar", "observedAt", "quote_time", "trigger_quote_time", "reference_quote_time", "reference_bid", "reference_ask", "current_bid", "current_ask", "trigger_move_bps", "trigger_bid", "trigger_ask", "invalidation_level", "ema20", "ema50", "rsi14", "macd", "macd_signal", "trend", "candle_shapes", "bar_close", "preflight_evidence"];
 function newOrders(t: PaperTelemetry, now: number) {
   const fills = botFills(t);
   return botOrders(t).filter(o => {

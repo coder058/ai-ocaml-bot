@@ -103,3 +103,19 @@ test("whole-second journal precision accepts a bounded earlier quote but never i
   t.orders[0].submittedAt = "2026-10-04T19:50:00.900Z";
   assert.equal(executionView(t, now).orders[0].evidence, null);
 });
+
+test("installed stock observation, stale scheduler, owned inventory and long-only routing are explicit", () => {
+  const t = fixture();
+  t.connections.stockAuto = { asOf: at, mode: "OBSERVE", automaticStrategy: true, newEntriesEnabled: false, stopHandling: "Regular session local exits", ownedPositions: [] };
+  assert.equal(executionView(t, now).routeCounts["Stock policy in observation"], 345);
+  t.connections.stockAuto.asOf = "2000-01-01T00:00:00Z";
+  assert.equal(executionView(t, now).routeCounts["Runtime unverified"], 345);
+  Object.assign(t.connections.stockAuto, { asOf: at, mode: "PAPER_EXPERIMENT", newEntriesEnabled: true, ownedPositions: [{ symbol: "STOCK0", quantity: "0.4", frame: "4h", pending: true }] });
+  Object.assign(t.connections.stocks, { sessionOpen: true, accountReady: true, executionGateArmed: true, canSubmitNow: true });
+  t.marketPipeline.markets[3].frames["1m"].candidate = "short";
+  const r = executionView(t, now).rows.find(r => r.symbol === "STOCK0" && r.frame === "1m");
+  assert.equal(r.steps.find(s => s.stage === "Risk / ownership").state, "blocked");
+  assert.match(r.steps.find(s => s.stage === "Risk / ownership").detail, /Pending stock order/);
+  assert.equal(r.steps.find(s => s.stage === "Execution route").state, "blocked");
+  assert.match(r.steps.find(s => s.stage === "Execution route").detail, /long entries only/);
+});

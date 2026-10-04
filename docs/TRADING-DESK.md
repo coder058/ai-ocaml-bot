@@ -4,7 +4,28 @@ The verified deployment is **http://127.0.0.1:3000**. The localhost frontend is
 read-only. Dublin runs data collection and the currently deployed paper rule
 independently of the browser. Vercel uploads are disabled.
 
-## Views
+## Current views after the history reset
+
+- **Open positions:** actual lab-owned inventory, exposure and broker-marked
+  unrealized P&L. Protected holdings are excluded.
+- **Analysis & execution:** 91 instruments x five frame cells, coverage/candidate/
+  routing totals and a factual per-frame path. Calculated evidence is separate
+  from broker preflight; unperformed account/quote/ownership checks stay unknown.
+- **New paper orders:** separate cohort starting 2026-10-04T19:36:49Z. Exact
+  broker IDs join recorded decision evidence and fills. A timestamp interval
+  must precede submission; today's chart never reconstructs an earlier trade.
+- **Market charts:** 455 frame cards with actual candles and on-demand details
+  of the 61 installed candlestick functions, 113 indicators and partial Murphy
+  panels. These are not independent positions or 455 enabled order routes.
+
+Earlier history, curve and export remain hidden. `/api/live` is positions-only,
+`/api/export` returns 410 and `/api/execution` does not restore old trade/P&L
+history. Raw audit files remain preserved. Filled notional is not net trade P&L.
+
+## Earlier desk and retained accounting implementation
+
+The following describes the pre-reset implementation. Its accounting code and
+raw audit data remain internal; the older views are not exposed in the current UI.
 
 - **Overview:** net marked paper P&L, broker unrealized P&L, the provisional
   realized/posted-cost decomposition, open exposure, actual open positions,

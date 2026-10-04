@@ -24,11 +24,13 @@ if method=='POST':
  b=json.loads(a[a.index('--data-binary')+1]); assert b['type']=='market' and b['time_in_force']=='day'
  rows=json.loads((r/'stock-paper-ledger.json').read_text())['orders']
  assert any(x['clientOrderId']==b['client_order_id'] and x['state']=='pending' for x in rows)
+ events=[json.loads(x) for x in (r/'stock-paper-events.jsonl').read_text().splitlines()]
+ assert any(x['clientOrderId']==b['client_order_id'] and x['kind']=='DECISION' for x in events)
  with (r/'posts.jsonl').open('a') as f:f.write(json.dumps(b)+'\n')
  if d.get('reject'):finish({'message':'synthetic rejected'},422)
  if d.get('unknown_before'):sys.exit(7)
  q=Decimal('1') if b['side']=='buy' else Decimal(b['qty'])
- q*=Decimal(d.get('fraction','1'))
+ q*=Decimal(d.get('fraction') or '1')
  pos=Decimal(d.get('position','0'));pos+=q if b['side']=='buy' else -q;d['position']=str(pos)
  o={'symbol':'QQQ','side':b['side'],'client_order_id':b['client_order_id'],
     'status':'canceled' if d.get('fraction') else 'filled','filled_qty':str(q),'filled_avg_price':'100'}
@@ -49,7 +51,10 @@ if url.endswith('/v2/positions'):
  if Decimal(d.get('position','0'))>0:rows.append({'symbol':'QQQ','side':'long','qty':d['position']})
  finish(rows)
 if url.endswith('/v2/orders?status=open'):finish(d.get('open_orders',[]))
-if url.startswith('https://data.alpaca.markets/v2/stocks/quotes/latest?feed=iex&symbols='):finish({'quotes':{}})
+if url.startswith('https://data.alpaca.markets/v2/stocks/quotes/latest?feed=iex&symbols='):
+ from datetime import datetime,timezone
+ finish({'quotes':{'QQQ':{'t':d.get('quote_time',datetime.now(timezone.utc).isoformat().replace('+00:00','Z')),
+   'bp':d.get('bid',99.5),'ap':d.get('ask',100.0)}}})
 raise AssertionError('unexpected path '+url)
 '''
 

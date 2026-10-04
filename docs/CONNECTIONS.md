@@ -5,7 +5,7 @@
 | Provider | Market | Connection | Execution |
 |---|---|---|---|
 | Alpaca paper | BTC/ETH/SOL spot crypto | Authenticated data and broker | Existing BTC policy; other confluence entries paused |
-| Alpaca paper | US stocks/ETF | Catalog, clock, IEX quotes, fractional router | Explicit paper requests only; automatic strategy disabled |
+| Alpaca paper | US stocks/ETF | Catalog, clock, IEX quotes, fractional router and closed-candle scheduler | Automatic policy in observation; new automatic orders disabled |
 | Alpaca IEX | 30 stock/ETF symbols | WS authentication and subscription confirmed | Data only; Sunday check received no market ticks |
 | Hyperliquid mainnet | 19 monitored HIP-3 contracts | Existing public market collector/scanner | Data only; no signer or real-money orders |
 | OANDA practice | Conventional FX | Missing practice token/account | Data connector prepared; no FX execution adapter |
@@ -38,6 +38,12 @@ uncertain outcomes retain their ID and are never blindly resubmitted.
 No stock strategy is currently armed. API access was checked on Sunday, when the
 broker clock reported closed and next regular open 5 October 09:30 New York.
 Synthetic execution tests passed; no live-market stock fill is claimed.
+
+The minute service now runs the [closed-candle scheduler](STOCK-AUTOMATION.md)
+in OBSERVE. It connects available stock frame readings to tested owned entry/exit
+handling and records current abstentions. Its new-order route remains disabled;
+this is an engineering path tested with synthetic broker responses, not a claim
+of successful automatic stock execution at the real paper broker.
 
 ## Conventional FX setup
 

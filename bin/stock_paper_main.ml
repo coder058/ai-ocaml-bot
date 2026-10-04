@@ -130,15 +130,62 @@ let run () =
       if status<>"ACTIVE" || blocked then failwith "paper account is not active";
       if side="buy" && power<Exact_decimal.to_float exact then failwith "insufficient non-marginable buying power";
       if not session then failwith "regular stock session is closed; no queued order";
+      let evidence=match argument "--evidence-file" with
+        | None->`Null
+        | Some file ->
+          let evidence=Yojson.Safe.from_file file in
+          if get_string "symbol" evidence<>ticker || get_string "clientOrderId" evidence<>cid ||
+             get_string "side" evidence<>side || get_string "policy" evidence<>"trend_candle_confluence_v1" then
+            failwith "automatic stock intent identity mismatch";
+          if Sys.getenv_opt "STOCK_AUTO_ORDERS"<>Some "1" then failwith "automatic stock paper gate is not armed";
+          if side="buy" then (
+            if Sys.getenv_opt "STOCK_AUTO_NEW_ENTRIES"<>Some "1" then failwith "automatic stock new entries are paused";
+            if exact<>unwrap (Exact_decimal.of_float Multi_paper.entry_usd) then failwith "automatic stock entry must use the user baseline";
+            let document=Option.value ~default:`Null (field "analysis" evidence) in
+            let signals=unwrap (Stock_policy.signals ~now:(Unix.gettimeofday ()) document) in
+            if not (List.exists (fun (s:Stock_policy.signal)->s.symbol=ticker && Stock_policy.entry_id s=cid &&
+                get_string "frame" evidence=s.frame && get_string "signalBar" evidence=s.bar &&
+                Paper_broker.float (field "invalidationLevel" evidence)=Some s.stop && field "reading" evidence=Some s.reading) signals) then
+              failwith "automatic stock signal is no longer current")
+          else (
+            let origin=get_string "originEntryId" evidence in
+            let managed=List.find_opt (fun row->get_string "symbol" row=ticker && get_string "side" row="buy") (List.rev !orders) in
+            match managed with
+            | Some row when get_string "clientOrderId" row=origin && field "analysisEvidence" row<>None->()
+            | _->failwith "automatic exit has no owned managed entry");
+          let quote_doc=unwrap (Paper_stock_broker.quotes [ticker]) in
+          let quote=unwrap (Stock_policy.quote ~now:(Unix.gettimeofday ()) ~symbol:ticker quote_doc) in
+          if side="buy" && Option.value ~default:infinity (Paper_broker.float (field "invalidationLevel" evidence))>=quote.bid then
+            failwith "automatic stock signal is already invalidated at the latest IEX bid";
+          if side="sell" then (
+            let origin=List.find (fun row->get_string "clientOrderId" row=get_string "originEntryId" evidence) !orders in
+            let origin_evidence=Option.get (field "analysisEvidence" origin) in
+            let stop=match Paper_broker.float (field "invalidationLevel" origin_evidence) with
+              | Some stop when Float.is_finite stop && stop>0.->stop|_->failwith "managed entry stop invalid" in
+            let document=try Yojson.Safe.from_file (path "market-pipeline.json") with _->`Null in
+            match Stock_policy.exit_reason ~now:(Unix.gettimeofday ()) ~stop
+                ~frame:(get_string "frame" origin_evidence) ~symbol:ticker quote document with
+            | Some _->()
+            | None->failwith "automatic exit trigger no longer holds at the router boundary");
+          (* SOURCE: re-fetch at the serialized router boundary; a scheduler's
+             earlier quote does not prove that the executable quote is fresh. *)
+          replace "preflight" (`Assoc ["regularSessionOpen",`Bool session;
+            "accountReady",`Bool true;"buyingPowerChecked",`Bool (side="buy");
+            "buyingPowerSufficient",(if side="buy" then `Bool true else `Null);
+            "brokerQuantity",`String (Exact_decimal.to_string current);
+            "ownedQuantity",`String (Exact_decimal.to_string own);"existingOrders",`Bool false;
+            "quoteTime",`String quote.timestamp;"bid",`Float quote.bid;"ask",`Float quote.ask]) evidence in
       if not (Array.exists ((=) "--execute") Sys.argv) then
         print_endline (Yojson.Safe.to_string (`Assoc ["dryRun",`Bool true;"request",Yojson.Safe.from_string body]))
       else (
         if Sys.getenv_opt "PAPER_ORDERS"<>Some "1" || Sys.getenv_opt "STOCK_PAPER_ORDERS"<>Some "1" then failwith "stock paper gates are not armed";
         let reason=Option.value ~default:"explicit paper execution request; no automatic strategy" (argument "--reason") in
-        let row=`Assoc ["symbol",`String ticker;"side",`String side;"clientOrderId",`String cid;
+        let row=`Assoc (["symbol",`String ticker;"side",`String side;"clientOrderId",`String cid;
           "state",`String "pending";"sentAt",`String (Multi_paper.stamp (Unix.gettimeofday ()));
-          "reason",`String reason;"request",Yojson.Safe.from_string body] in
-        orders:= !orders @ [row];save !orders;journal "DECISION" ticker cid reason (Yojson.Safe.from_string body);
+          "reason",`String reason;"request",Yojson.Safe.from_string body] @
+          if evidence=`Null then [] else ["analysisEvidence",evidence]) in
+        orders:= !orders @ [row];save !orders;
+        journal "DECISION" ticker cid reason (if evidence=`Null then Yojson.Safe.from_string body else evidence);
         match Paper_stock_broker.submit ~asset ~side ~amount ~client_order_id:cid with
         | Ok broker ->
           validate_broker row broker;

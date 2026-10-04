@@ -21,11 +21,30 @@ from export_telemetry import (  # noqa: E402
     public_journal,
     public_positions,
     multi_order_evidence,
+    stock_order_evidence,
     service_state,
 )
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_auto_stock_evidence_retains_actual_preflight_without_private_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/"stock-events.jsonl"
+            # SOURCE: synthetic exact identity and timestamp fixture, not a trade.
+            event={"kind":"DECISION","at":"2026-10-04T20:00:00Z","clientOrderId":"aibotstkAuto",
+                "reason":"Synthetic confluence","detail":{"policy":"trend_candle_confluence_v1","frame":"4h",
+                "signalBar":"2026-10-04T12:00:00Z","invalidationLevel":99,"accountId":"PRIVATE",
+                "reading":{"ema20":100,"ema50":99,"candleShapes":["hammer_shape"]},
+                "preflight":{"accountReady":True,"regularSessionOpen":True,"buyingPowerChecked":True,
+                    "buyingPowerSufficient":True,"quoteTime":"2026-10-04T19:59:59Z","bid":100,"ask":101,"secret":"PRIVATE"}}}
+            path.write_text(json.dumps(event)+"\n"+json.dumps([])+"\n")
+            result=stock_order_evidence([{"id":"exact","clientOrderId":"aibotstkAuto","symbol":"QQQ"},
+                {"id":"neighbor","clientOrderId":"aibotstkOther","symbol":"QQQ"}],path)
+            self.assertEqual(set(result),{"exact"})
+            self.assertEqual(result["exact"]["policy"],"trend_candle_confluence_v1")
+            self.assertEqual(result["exact"]["trigger_quote_time"],"2026-10-04T19:59:59Z")
+            self.assertTrue(json.loads(result["exact"]["preflight_evidence"])["accountReady"])
+            self.assertNotIn("PRIVATE",json.dumps(result))
     def test_capture_health_uses_configured_unit_without_publishing_private_name(self):
         # SOURCE: synthetic service outcomes verify deployment-name mapping only.
         import subprocess

@@ -37,3 +37,8 @@
  (name test_paper_stock_broker)
  (modules test_paper_stock_broker)
  (libraries paper_market))
+
+(test
+ (name test_stock_policy)
+ (modules test_stock_policy)
+ (libraries paper_market))

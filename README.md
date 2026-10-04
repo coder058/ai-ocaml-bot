@@ -10,8 +10,10 @@ The Vercel deployment is paused; the local mode is the verified current setup.
 The Dublin VPS runs an OCaml paper order service and an Alpaca US market-data
 collector. The local monitor reads a sanitized broker and journal snapshot
 through SSH; no Alpaca secret is sent to the website. The dashboard
-shows lab-owned orders, fills, positions and decision traces. Protected AAPL
-and unrelated account holdings stay private. Results subtract posted USD crypto
+shows current lab-owned positions, per-frame execution states and a separately
+dated cohort of new orders with retained decision evidence. Earlier trade history
+remains hidden after the requested reset. Protected AAPL
+and unrelated account holdings stay private. The retained accounting code subtracts posted USD crypto
 fees and use broker marks; they stay provisional until daily fee posting,
 quantities and closed-lot reconciliation are complete.
 
@@ -30,13 +32,26 @@ contained 13,509 active tradable stocks/ETF; catalog availability does not mean
 all are continuously monitored. A separate authenticated free IEX WebSocket
 captures 30 selected stock/ETF symbols. It uses native
 historical warmup, an incremental cache and the actual equity-session calendar.
-New confluence crypto entries remain paused. A separate tested OCaml stocks/ETF
-paper router is connected; no automatic stock strategy is armed. Conventional
+New confluence crypto entries remain paused. A tested OCaml stocks/ETF scheduler
+now connects closed candidates to the durable paper router in **observation**;
+no new automatic stock strategy is armed. Conventional
 FX requires an OANDA v20 practice account; its data connector currently reports
 missing credentials and has no FX order adapter. Currency ETFs and Hyperliquid
 FX-like perps are labeled as such. See [connections and operations](docs/CONNECTIONS.md),
 [the market pipeline](docs/MARKET-PIPELINE.md) and
 [the ongoing refinement log](docs/EIGHT-HOUR-REFINEMENT.md).
+
+### Read the execution path
+
+**Closed candles → OCaml evidence → frozen candidate → route/gates → ownership
+and executable quote preflight → durable request → paper acknowledgement/fills.**
+
+Localhost exposes a filterable 91 x five matrix with factual data/policy/routing
+states and explicit unknown checks. A candidate is not an order; five frames
+describe the same underlying instrument. The frozen rule uses selected OCaml
+shapes/EMA trend; full TA-Lib supplies separate descriptive Python analysis. No
+calibrated winning probability is displayed. See [execution work evidence](docs/EXECUTION-TRACE-WORK.md)
+and the [stock scheduler/owned-exit runbook](docs/STOCK-AUTOMATION.md).
 
 - The Dublin collector archives Alpaca US BTC/USD WebSocket quotes, trades,
   order books, closed-minute bars and later bar revisions with receipt times.
@@ -44,8 +59,9 @@ FX-like perps are labeled as such. See [connections and operations](docs/CONNECT
   restricted to BTC, ETH and SOL at the signal and adapter boundaries. Prior
   bot-owned altcoin positions were wound down in nine broker-filled paper sales
   on 4 October. Historical captures and executions remain available.
-  Only BTC quotes and bars reach OCaml over the local Unix socket; the other
-  pairs cannot trigger orders. The [multi-asset research boundary](docs/MULTI-ASSET-RESEARCH.md)
+  Only BTC quotes and bars reach the legacy OCaml receiver over its Unix socket.
+  ETH/SOL use the separate multiframe OMS, with new entries paused and owned
+  exits/pending reconciliation separate. The [multi-asset research boundary](docs/MULTI-ASSET-RESEARCH.md)
   records the measured market catalog and five requested timeframes. Session IDs and
   a per-consumer sequence expose reconnects and lost datagrams.
 - A separate read-only timer derives closed 1m/5m/30m/1h/4h candle coverage,
@@ -119,20 +135,20 @@ and acceptance gates; it does not claim unbuilt steps are implemented.
 
 ## Trading desk
 
-The localhost desk separates **Overview**, **Closed trades**, **Orders & fills**,
-**Markets** and **Connections**. It shows actual open quantities/marks/unrealized
-P&L, FIFO matched closing fills before fees, broker attempts and partial fills,
-and the retained reason behind each order. Filters cover instrument, policy,
-UTC dates and order side; CSV exports retain the entire filtered history.
+The current desk shows **Open positions**, **Analysis & execution**, **New paper
+orders** and **Market charts**. Earlier closed-trade history, the old curve and
+CSV export remain hidden after the reset. The new order cohort starts at
+2026-10-04T19:36:49Z and distinguishes fills from pending/canceled attempts,
+showing exact pre-submit evidence when retained. It does not infer net trade P&L
+or explain a historical order using today's indicators.
 
 Net marked P&L is fill cash flow + broker inventory marks + posted USD fees.
 The displayed realized/posted-cost component is that provisional total minus
 broker open-position unrealized P&L, not settled per-trade net P&L. Asset fees
 and delayed posting prevent a claim of fully reconciled closed returns.
 
-The P&L curve stores real snapshots in `.local/performance.jsonl` when the local
-API is polled. It starts at the first recorded snapshot; it is not a backtest,
-and closing the monitor stops these local chart observations. Dublin data
+The retained accounting implementation uses actual snapshots, not a backtest;
+its older curve is not exposed by the current positions-only API. Dublin data
 capture and the deployed paper service continue independently. See the
 [monitor guide](docs/TRADING-DESK.md).
 

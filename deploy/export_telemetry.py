@@ -470,6 +470,8 @@ def connection_state() -> dict:
         "lastOrderEventAt","eventCount","orderAuthority","restReconciliationRequired","errorClass")),
         "stocks":("stock-connection.json",("asOf","provider","product","connected","sessionOpen",
         "nextOpen","automaticStrategy","executionGateArmed","canSubmitNow","feed","accountReady")),
+        "stockAuto":("stock-auto.json",("asOf","mode","automaticStrategy","newEntriesEnabled","sessionOpen",
+        "entryUsd","maxOpenPositions","eligibleLongSignals","routerInvocations","abstentions","ownedPositions","winProbability","stopHandling")),
         "stockStream":("stock-capture.json",("asOf","provider","product","feed","connected","symbols",
         "symbolLimit","quoteCount","barCount","orderAuthority","fullNbbo","lastMarketEventAt","reason","errorClass")),
         "fx":("fx-connection.json",("asOf","provider","product","connected","executionMode","automaticStrategy",
@@ -494,9 +496,24 @@ def stock_order_evidence(orders:list[dict],path:Path=STATE_DIR/"stock-paper-even
     for line in path.read_text().splitlines():
         try:row=json.loads(line)
         except ValueError:continue
-        if row.get("kind")=="DECISION" and row.get("clientOrderId") in by_client:
+        if isinstance(row,dict) and row.get("kind")=="DECISION" and row.get("clientOrderId") in by_client:
             evidence[by_client[row["clientOrderId"]]]={"policy":"explicit_stock_paper_request",
                 "reason":str(row.get("reason","")),"observedAt":str(row.get("at","")),"frame":"manual"}
+            detail=row.get("detail",{})
+            if isinstance(detail,dict) and detail.get("policy")=="trend_candle_confluence_v1":
+                reading=detail.get("reading",{})
+                if not isinstance(reading,dict):reading={}
+                values={"policy":detail["policy"],"frame":detail.get("frame"),"signal_bar":detail.get("signalBar"),
+                    "invalidation_level":detail.get("invalidationLevel"),"ema20":reading.get("ema20"),
+                    "ema50":reading.get("ema50"),"rsi14":reading.get("rsi14"),"trend":reading.get("trend"),
+                    "candle_shapes":", ".join(reading.get("candleShapes",[]))}
+                preflight=detail.get("preflight",{})
+                if isinstance(preflight,dict):
+                    values.update({"trigger_bid":preflight.get("bid"),"trigger_ask":preflight.get("ask"),
+                        "trigger_quote_time":preflight.get("quoteTime"),"preflight_evidence":json.dumps({key:preflight.get(key)
+                        for key in ("regularSessionOpen","accountReady","buyingPowerChecked","buyingPowerSufficient",
+                                    "brokerQuantity","ownedQuantity","existingOrders")})})
+                evidence[by_client[row["clientOrderId"]]].update({key:str(value) for key,value in values.items() if value is not None})
     return evidence
 
 

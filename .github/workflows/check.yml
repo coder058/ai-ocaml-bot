@@ -24,6 +24,7 @@ jobs:
         run: |
           python -m unittest discover -s test -p test_multi_paper_runtime.py -v
           python -m unittest discover -s test -p test_stock_paper_runtime.py -v
+          python -m unittest discover -s test -p test_stock_auto_runtime.py -v
           python -m unittest discover -s test -p test_oanda_practice.py -v
           python -m unittest discover -s test -p test_stock_capture.py -v
           python -m unittest discover -s test -p test_paper_order_capture.py -v
