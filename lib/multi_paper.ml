@@ -2,7 +2,7 @@
    without credentials, a broker connection or invented performance results. *)
 
 type pending = {
-  client_id : string; side : string; requested_qty : float; limit_price : float;
+  client_id : string; side : string; requested_qty : float; quantity_text : string option; limit_price : float;
   sent_at : string; reason : string; reading : Yojson.Safe.t;
 }
 type ticket = {
@@ -67,6 +67,7 @@ let signals ~now document =
            (match Paper_crypto_broker.canonical symbol with
             | Error _ -> []
             | Ok "BTC/USD" -> [] (* SOURCE: legacy orderer retains exclusive BTC ownership. *)
+            | Ok symbol when not (Paper_crypto_broker.allowed_entry symbol) -> []
             | Ok symbol -> List.filter_map (fun (frame, minutes) ->
                 match field frame readings with
                 | Some reading ->
@@ -94,10 +95,10 @@ let eligible state (signal : signal) =
   List.length (active_tickets state) < max_open_tickets &&
   List.assoc_opt (key signal) state.seen <> Some signal.bar
 
-let entry state (signal : signal) ~now ~qty ~price =
+let entry ?quantity_text state (signal : signal) ~now ~qty ~price =
   let id = client_id [signal.symbol; signal.frame; signal.bar; "entry";
                       "trend_candle_confluence_v1"] in
-  let pending = {client_id=id; side="buy"; requested_qty=qty; limit_price=price;
+  let pending = {client_id=id; side="buy"; requested_qty=qty; quantity_text; limit_price=price;
     sent_at=stamp now; reason="Rising EMA20/EMA50 trend and bullish candle shape on a closed bar";
     reading=signal.reading} in
   let ticket = {symbol=signal.symbol; frame=signal.frame; bar=signal.bar; entry_id=id;
@@ -127,9 +128,9 @@ let exit_reason ~now (ticket : ticket) quote document =
        | _ -> None)
     | _ -> None
 
-let exit ?(reading=`Assoc []) state (ticket : ticket) ~now ~qty ~price ~quote_time ~reason =
+let exit ?quantity_text ?(reading=`Assoc []) state (ticket : ticket) ~now ~qty ~price ~quote_time ~reason =
   let pending = {client_id=client_id [ticket.entry_id; "exit"; quote_time]; side="sell";
-    requested_qty=qty; limit_price=price; sent_at=stamp now; reason;
+    requested_qty=qty; quantity_text; limit_price=price; sent_at=stamp now; reason;
     reading=`Assoc (["invalidationLevel",`Float ticket.stop; "originFrame",`String ticket.frame] @
       (match reading with `Assoc fields -> List.remove_assoc "invalidationLevel" fields | _ -> []))} in
   let ticket = {ticket with pending=Some pending; last_exit_quote=Some quote_time} in
@@ -157,6 +158,7 @@ let reconcile (ticket : ticket) order = match ticket.pending with
     | _ -> Error "broker result cannot be matched to the durable pending order"
 
 let pending_json p = `Assoc ["clientOrderId",`String p.client_id; "side",`String p.side;
+  "quantityText",(match p.quantity_text with None -> `Null | Some text -> `String text);
   "requestedQty",`Float p.requested_qty; "limitPrice",`Float p.limit_price;
   "sentAt",`String p.sent_at; "reason",`String p.reason; "reading",p.reading]
 let ticket_json (t : ticket) = `Assoc ["symbol",`String t.symbol; "frame",`String t.frame;
@@ -182,6 +184,7 @@ let of_json document =
       | Some `Null -> None
       | Some p -> Some {client_id=required_string "clientOrderId" p;
           side=required_string "side" p; requested_qty=required_number "requestedQty" p;
+          quantity_text=string (field "quantityText" p);
           limit_price=required_number "limitPrice" p; sent_at=required_string "sentAt" p;
           reason=required_string "reason" p; reading=Option.get (field "reading" p)}
       | _ -> failwith "pending field absent" in
@@ -201,6 +204,13 @@ let of_json document =
          p.limit_price <= 0. || not (String.starts_with ~prefix:"jsbotmtf" p.client_id) ||
          (p.side="sell" && p.requested_qty > t.owned_max) -> failwith "invalid pending order"
      | _ -> ());
+    (match t.pending with
+     | Some p -> (match p.quantity_text with
+       | None -> () (* SOURCE: older durable ledgers predate exact quantity text. *)
+       | Some text -> (match Exact_decimal.of_string text with
+         | Ok value when value>Exact_decimal.zero && Exact_decimal.to_float value=p.requested_qty -> ()
+         | _ -> failwith "pending decimal text differs from requested owned quantity"))
+     | None -> ());
     t in
   try match field "version" document, field "tickets" document, field "seen" document with
     | Some (`Int 1), Some (`List rows), Some (`Assoc seen) ->

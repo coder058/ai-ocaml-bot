@@ -24,16 +24,9 @@ STREAM_URL = "wss://stream.data.alpaca.markets/v1beta3/crypto/us"
 ENV_PATH = Path("/etc/jsbot-paper.env")
 CAPTURE_DIR = Path("/home/ubuntu/jsbot-paper-state/market-capture/us")
 HOT_SOCKET = Path("/home/ubuntu/jsbot-paper-state/alpaca-hot.sock")
-SYMBOL = "BTC/USD"  # SOURCE: the OCaml paper bot's only traded symbol.
-# SOURCE: Pattern Forge follows ETH and SOL; the remaining symbols had zero
-# 5m historical gaps in the 2026-09-27 23:30 UTC same-day account scan.
-# This is a data-coverage selection, not evidence of profitable signals.
-# All remain research-only; none receives OCaml paper order authority.
-RESEARCH_SYMBOLS = (
-    "AAVE/USD", "ADA/USD", "ARB/USD", "AVAX/USD", "DOT/USD", "ETH/USD",
-    "FIL/USD", "GRT/USD", "LDO/USD", "ONDO/USD", "RENDER/USD", "SOL/USD",
-    "SUSHI/USD", "WIF/USD",
-)
+SYMBOL = "BTC/USD"  # SOURCE: legacy OCaml paper owner and hot quote channel.
+# SOURCE: user's explicit crypto universe; historical captures remain archived.
+RESEARCH_SYMBOLS = ("ETH/USD", "SOL/USD")
 ARCHIVED_SYMBOLS = (SYMBOL, *RESEARCH_SYMBOLS)
 # GUESS: # UNCALIBRATED GUESS — stop collecting before the 49 GB free disk
 # observed on Dublin is nearly exhausted. Replace with measured capacity alert.

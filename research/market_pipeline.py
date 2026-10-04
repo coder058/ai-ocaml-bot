@@ -38,8 +38,16 @@ HL_INFO = "https://api.hyperliquid.xyz/info"
 PAPER_ORIGIN = "https://paper-api.alpaca.markets"
 # SOURCE: user requested popular stocks, Dow/Nasdaq and energy; these listed ETF
 # proxies are explicit instruments, not cash indices or physical energy prices.
-EQUITIES = ("DIA", "QQQ", "SPY", "XLE", "XOP", "TSLA", "NVDA", "MSFT",
-            "AMZN", "GOOGL", "META", "AMD")
+EQUITIES = ("DIA", "QQQ", "SPY", "IWM", "VTI", "VOO", "XLK", "XLF", "XLV", "XLI",
+            "XLY", "XLP", "XLU", "XLB", "XLRE", "SMH", "SOXX", "ARKK", "TLT", "IEF",
+            "HYG", "LQD", "GLD", "SLV", "XLE", "XOP", "USO", "UNG", "BNO", "OIH",
+            "UUP", "FXE", "FXY", "FXB", "FXC", "FXA", "FXF", "TSLA", "NVDA", "MSFT",
+            "AMZN", "GOOGL", "META", "AMD", "AVGO", "NFLX", "INTC", "MU", "ORCL",
+            "CRM", "ADBE", "PLTR", "JPM", "BAC", "GS", "V", "MA", "XOM", "CVX",
+            "COP", "OXY", "SLB", "WMT", "COST", "KO", "PEP", "MCD", "CAT", "BA")
+CRYPTO_ALLOWED = {"BTC/USD", "ETH/USD", "SOL/USD"}  # SOURCE: user's crypto restriction.
+CURRENCY_ETFS = {"UUP", "FXE", "FXY", "FXB", "FXC", "FXA", "FXF"}  # SOURCE: listed FX ETF proxies.
+ENERGY_ETFS = {"XLE", "XOP", "USO", "UNG", "BNO", "OIH"}  # SOURCE: listed sector/commodity ETF proxies.
 # SOURCE: the old HIP-3 watchlist plus additional energy contracts verified in
 # the live xyz meta catalog on 2026-10-01. Availability is rechecked each run.
 HIP3_REQUESTED = (*COINS, "xyz:CL", "xyz:NATGAS", "xyz:XLE", "xyz:GOLD", "xyz:SILVER")
@@ -158,6 +166,10 @@ def merge(prior: list[dict], new: list[dict]) -> list[dict]:
 def category(symbol: str, venue: str) -> str:
     if venue == "Alpaca crypto":
         return "Crypto"
+    if venue == "Alpaca equities" and symbol in CURRENCY_ETFS:
+        return "Currency ETF proxies"
+    if venue == "Alpaca equities" and symbol in ENERGY_ETFS:
+        return "Energy"
     name = symbol.removeprefix("xyz:")
     if name in ("EUR", "GBP", "JPY"):
         return "FX-like perps"
@@ -257,7 +269,20 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     if not isinstance(assets, list):
         raise ValueError("paper asset catalog missing")
     crypto = sorted(a["symbol"] for a in assets if a.get("tradable") is True and
-                    a.get("status") == "active" and a["symbol"].endswith("/USD"))
+                    a.get("status") == "active" and a.get("symbol") in CRYPTO_ALLOWED)
+    stock_assets = paper_get("/v2/assets?status=active&asset_class=us_equity", credentials)
+    if not isinstance(stock_assets, list):
+        raise ValueError("stock/ETF asset catalog missing")
+    tradeable_stocks = {a["symbol"]: a for a in stock_assets
+        if a.get("tradable") is True and a.get("status") == "active" and a.get("class") == "us_equity"}
+    equities = [symbol for symbol in EQUITIES if symbol in tradeable_stocks and symbol != "AAPL"]
+    atomic(output.with_name("instrument-catalog.json"), {
+        "asOf": utc(as_of), "provider": "Alpaca paper", "catalogOnly": True,
+        "stockEtfCount": len(tradeable_stocks), "monitoredStocks": equities,
+        "unavailableRequestedStocks": [s for s in EQUITIES if s not in tradeable_stocks],
+        "cryptoAllowed": crypto, "protectedStocks": ["AAPL"],
+        "assets": [{k: a.get(k) for k in ("symbol", "name", "exchange", "fractionable", "shortable")}
+                   for _, a in sorted(tradeable_stocks.items())]})
     hl_meta = request(HL_INFO, body={"type": "meta", "dex": "xyz"})
     active_hl = {a["name"] for a in hl_meta["universe"] if not a.get("isDelisted")}
     hip3 = [symbol for symbol in HIP3_REQUESTED if symbol in active_hl]
@@ -268,7 +293,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     calendar = paper_get("/v2/calendar?" + calendar_query, credentials)
     clock = paper_get("/v2/clock", credentials)
     equity_slots = {name: session_slots(calendar, minutes) for name, (minutes, _) in FRAMES.items()}
-    universes = {"Alpaca crypto": crypto, "Alpaca equities": list(EQUITIES),
+    universes = {"Alpaca crypto": crypto, "Alpaca equities": equities,
                  "Hyperliquid HIP-3": hip3}
     for venue, symbols in universes.items():
         for symbol in symbols:

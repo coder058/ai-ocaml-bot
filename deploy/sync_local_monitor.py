@@ -67,12 +67,16 @@ def validate_snapshot(document: object) -> dict:
         compact = value.replace("/", "")
         return compact[:-len("USD")] + "/USD" if len(compact) > len("USD") else None
 
-    public_symbols = {"BTC/USD"} | {crypto_symbol(row.get("symbol"))
+    def symbol(value):
+        return crypto_symbol(value) or (value if isinstance(value,str) and value!="AAPL"
+            and re.fullmatch(r"[A-Z0-9][A-Z0-9.-]*",value) else None)
+
+    public_symbols = {"BTC/USD"} | {symbol(row.get("symbol"))
         for row in document["orders"] if isinstance(row, dict) and
-        str(row.get("clientOrderId", "")).startswith("jsbotmtf") and
-        crypto_symbol(row.get("symbol")) is not None}
+        (str(row.get("clientOrderId", "")).startswith("jsbotmtf") and crypto_symbol(row.get("symbol")) is not None or
+         str(row.get("clientOrderId", "")).startswith("aibotstk") and symbol(row.get("symbol")) is not None)}
     for field in ("orders", "fills", "positions"):
-        if any(not isinstance(row, dict) or crypto_symbol(row.get("symbol")) not in public_symbols
+        if any(not isinstance(row, dict) or symbol(row.get("symbol")) not in public_symbols
                for row in document[field]):
             raise ValueError("snapshot includes non-public holdings")
     pipeline = document.get("marketPipeline")

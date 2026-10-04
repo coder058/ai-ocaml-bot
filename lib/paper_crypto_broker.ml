@@ -1,7 +1,8 @@
 (* Explicit multi-crypto PAPER adapter. The existing BTC adapter remains
    unchanged. No equities, wallet signing or configurable trading host. *)
 
-type asset = { symbol : string; tick : float; step : float; minimum : float }
+type asset = { symbol : string; tick : float; step : float; minimum : float;
+               step_text : string }
 type quote = { timestamp : string; minute : int; seconds : float;
                bid : float; ask : float }
 
@@ -29,6 +30,11 @@ let compact symbol = String.concat "" (String.split_on_char '/' symbol)
 let same_symbol left right = match canonical left, canonical right with
   | Ok left, Ok right -> left = right | _ -> false
 
+(* SOURCE: user's explicit crypto entry universe. Other assets can only be
+   reduced by the existing owned-position wind-down path, never newly bought. *)
+let allowed_entry symbol = match canonical symbol with
+  | Ok ("BTC/USD" | "ETH/USD" | "SOL/USD") -> true | _ -> false
+
 let asset symbol = match canonical symbol with
   | Error _ as error -> error
   | Ok symbol ->
@@ -42,7 +48,9 @@ let asset symbol = match canonical symbol with
             positive (number (field "min_order_size" document)) with
       | Some returned, Some "crypto", Some "active", Some true,
           Some tick, Some step, Some minimum when same_symbol returned symbol ->
-        Ok { symbol; tick; step; minimum }
+        (match string (field "min_trade_increment" document) with
+         | Some step_text -> Ok { symbol; tick; step; minimum; step_text }
+         | None -> Error "asset quantity increment must retain decimal text")
       | _ -> Error "asset is not an active tradable USD crypto with valid increments"
 
 let positions () = match Paper_broker.get "/v2/positions" with
@@ -59,6 +67,16 @@ let quantity symbol positions =
   | [ row ] -> (match number (field "qty" row) with
       | Some value when Float.is_finite value && value >= 0. -> Ok value
       | _ -> Error "broker position is not a finite long quantity")
+  | _ -> Error "duplicate broker position"
+
+let quantity_exact symbol positions =
+  let matches = List.filter (fun row -> match string (field "symbol" row) with
+    | Some returned -> same_symbol returned symbol | None -> false) positions in
+  match matches with
+  | [] -> Ok Exact_decimal.zero
+  | [row] -> (match string (field "qty" row) with
+      | Some text -> Exact_decimal.of_string text
+      | None -> Error "position quantity must retain broker decimal text")
   | _ -> Error "duplicate broker position"
 
 let open_orders () = match Paper_broker.get "/v2/orders?status=open" with
@@ -130,10 +148,14 @@ let floor_increment value increment =
 let ceil_increment value increment =
   submitted_precision (ceil (Float.next_after (value /. increment) neg_infinity) *. increment)
 
-let submit ~asset ~side ~qty ~limit_price ~client_order_id =
+let submit ?qty_text ?(market_exit=false) ~asset ~side ~qty ~limit_price ~client_order_id () =
   if Sys.getenv_opt "PAPER_ORDERS" <> Some "1" ||
      Sys.getenv_opt "MULTI_PAPER_ORDERS" <> Some "1" then
     Error "multi-market PAPER gates are not armed"
+  else if side="buy" && not (allowed_entry asset.symbol) then
+    Error "new crypto entries are restricted to BTC, ETH and SOL"
+  else if market_exit && (side<>"sell" || allowed_entry asset.symbol) then
+    Error "market wind-down is restricted to selling excluded crypto"
   else if not (String.starts_with ~prefix:"jsbotmtf" client_order_id) ||
           not (String.for_all (function 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' -> true | _ -> false)
             client_order_id) then Error "client order ID is outside multi-frame namespace"
@@ -144,11 +166,21 @@ let submit ~asset ~side ~qty ~limit_price ~client_order_id =
              Paper_broker.credentials () with
     | Error error, _, _ | _, Error error, _ | _, _, Error error -> Error error
     | Ok symbol, Ok (), Ok (key_id, secret) ->
-      let body = Yojson.Safe.to_string (`Assoc [
+      let quantity_text=Option.value ~default:(Printf.sprintf "%.9f" qty) qty_text in
+      let exact=Exact_decimal.of_string quantity_text in
+      if (match exact with Error _ -> true | Ok value ->
+        value<=Exact_decimal.zero || Exact_decimal.to_float value<>qty ||
+        (match Exact_decimal.of_string asset.step_text with
+         | Error _ -> true | Ok step -> step<=Exact_decimal.zero || Int64.rem value step<>0L)) then
+        Error "exact quantity does not match the owned request or asset grid"
+      else let body = Yojson.Safe.to_string (`Assoc ([
         "symbol", `String symbol; "side", `String side;
         (* SOURCE: Alpaca crypto quantity supports at most nine decimal places. *)
-        "qty", `String (Printf.sprintf "%.9f" qty);
-        "limit_price", `String (Printf.sprintf "%.9f" limit_price);
-        "type", `String "limit"; "time_in_force", `String "ioc";
-        "client_order_id", `String client_order_id ]) in
+        "qty", `String quantity_text;
+        (* SOURCE: Alpaca supports market/limit crypto IOC; the user's removal
+           instruction only gives market wind-down authority to excluded assets. *)
+        "type", `String (if market_exit then "market" else "limit");
+        "time_in_force", `String "ioc";
+        "client_order_id", `String client_order_id ] @
+        (if market_exit then [] else ["limit_price", `String (Printf.sprintf "%.9f" limit_price)]))) in
       Alpaca_http.post_json ~url:(Paper_broker.base ^ "/v2/orders") ~key_id ~secret ~body

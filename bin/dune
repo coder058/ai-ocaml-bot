@@ -17,3 +17,8 @@
  (name multi_paper_main)
  (modules multi_paper_main)
  (libraries paper_market yojson unix))
+
+(executable
+ (name stock_paper_main)
+ (modules stock_paper_main)
+ (libraries paper_market yojson unix))

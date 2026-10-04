@@ -27,3 +27,13 @@
  (name test_multi_paper)
  (modules test_multi_paper)
  (libraries paper_market unix))
+
+(test
+ (name test_exact_decimal)
+ (modules test_exact_decimal)
+ (libraries paper_market))
+
+(test
+ (name test_paper_stock_broker)
+ (modules test_paper_stock_broker)
+ (libraries paper_market))

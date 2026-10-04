@@ -30,7 +30,7 @@ if method=='POST':
     ledger=json.loads((root/'multi-paper-ledger.json').read_text())
     pending=next(t['pending'] for t in ledger['tickets'] if t['symbol']==body['symbol'])
     assert pending['clientOrderId']==body['client_order_id']  # durable BEFORE POST
-    assert body['symbol']=='ETH/USD' and body['time_in_force']=='ioc'
+    assert body['symbol']==data.get('symbol','ETH/USD') and body['time_in_force']=='ioc'
     with (root/'posts.jsonl').open('a') as stream: stream.write(json.dumps(body)+'\n')
     if data.get('reject'):
         finish({'message':'synthetic rejection'},422)
@@ -41,9 +41,9 @@ if method=='POST':
     if body['side']=='buy': qty+=filled-Decimal('0.001')  # synthetic received-asset fee
     else: qty-=filled
     data['position']=str(qty)
-    order={'client_order_id':body['client_order_id'],'symbol':'ETHUSD',
+    order={'client_order_id':body['client_order_id'],'symbol':data.get('symbol','ETH/USD').replace('/',''),
         'side':body['side'],'status':'canceled','filled_qty':str(filled),
-        'filled_avg_price':body['limit_price']}
+        'filled_avg_price':body.get('limit_price','100')}
     data.setdefault('orders',{})[body['client_order_id']]=order
     (root/'broker.json').write_text(json.dumps(data))
     if data.get('uncertain_after_accept'): sys.exit(7)
@@ -55,17 +55,17 @@ if '/orders:by_client_order_id?' in url:
 if url.endswith('/v2/account'):
     finish({'status':'ACTIVE','trading_blocked':False,'crypto_status':'ACTIVE',
             'non_marginable_buying_power':'100000'})
-if url.endswith('/v2/assets/ETHUSD'):
-    finish({'symbol':'ETH/USD','class':'crypto','status':'active','tradable':True,
+if url.endswith('/v2/assets/'+data.get('symbol','ETH/USD').replace('/','')):
+    finish({'symbol':data.get('symbol','ETH/USD'),'class':'crypto','status':'active','tradable':True,
             'price_increment':'0.01','min_trade_increment':'0.000000001','min_order_size':'0.01'})
 if url.endswith('/v2/positions'):
     rows=[{'symbol':'AAPL','qty':'100','asset_class':'us_equity'}]
-    if Decimal(data.get('position','0'))>0: rows.append({'symbol':'ETHUSD','qty':data['position']})
+    if Decimal(data.get('position','0'))>0: rows.append({'symbol':data.get('symbol','ETH/USD').replace('/',''),'qty':data['position']})
     finish(rows)
 if url.endswith('/v2/orders?status=open'): finish(data.get('open_orders',[]))
-if url.startswith('https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes?symbols=ETH%2FUSD'):
+if url.startswith('https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes?symbols='):
     at=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
-    finish({'quotes':{'ETH/USD':{'t':at,'bp':data.get('bid',99.9),'ap':data.get('ask',100)}}})
+    finish({'quotes':{data.get('symbol','ETH/USD'):{'t':at,'bp':data.get('bid',99.9),'ap':data.get('ask',100)}}})
 raise AssertionError('Unexpected synthetic HTTP path: '+url)
 '''
 
@@ -92,11 +92,12 @@ class RuntimeTests(unittest.TestCase):
                     "lastBarStart": bar.isoformat().replace("+00:00", "Z"),
                     "invalidationLevel": 90, "orderAuthority": False, "winProbability": None}}}]}))
 
-    def run_engine(self, root, armed=True, new_entries=True):
+    def run_engine(self, root, armed=True, new_entries=True, wind_down=False):
         environment = {**os.environ, "PATH": str(root)+":"+os.environ["PATH"],
             "TZ": "UTC", "PAPER_STATE_DIR": str(root), "SYNTHETIC_OMS_DIR": str(root),
             "PAPER_ORDERS": "1", "MULTI_PAPER_ORDERS": "1" if armed else "0",
             "MULTI_PAPER_NEW_ENTRIES": "1" if new_entries else "0",
+            "MULTI_PAPER_WIND_DOWN_EXCLUDED": "1" if wind_down else "0",
             "APCA_API_KEY_ID": "SYNTHETIC", "APCA_API_SECRET_KEY": "SYNTHETIC"}
         result = subprocess.run([str(ENGINE), "--execute"], env=environment,
                                 capture_output=True, text=True, timeout=30)
@@ -129,6 +130,20 @@ class RuntimeTests(unittest.TestCase):
             final = self.run_engine(root)
             self.assertEqual(final["activeTickets"], [])
             self.assertTrue(all(post["symbol"] == "ETH/USD" for post in self.posts(root)))
+
+    def test_excluded_crypto_wind_down_is_owned_market_sell(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=self.setup_fixture(directory)
+            self.run_engine(root)
+            path=root/'multi-paper-ledger.json';ledger=json.loads(path.read_text())
+            ledger['tickets'][0]['symbol']='BONK/USD';path.write_text(json.dumps(ledger))
+            self.update_broker(root,symbol='BONK/USD')
+            self.run_engine(root,new_entries=False,wind_down=True)
+            last=self.posts(root)[-1]
+            self.assertEqual(last['symbol'],'BONK/USD');self.assertEqual(last['side'],'sell')
+            self.assertEqual(last['type'],'market');self.assertNotIn('limit_price',last)
+            self.run_engine(root,new_entries=False,wind_down=True)
+            self.assertEqual(len(self.posts(root)),2)
 
     def test_unknown_accepted_response_reconciles_without_duplicate_post(self):
         with tempfile.TemporaryDirectory() as directory:

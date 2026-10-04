@@ -21,6 +21,11 @@ def document() -> dict:
 
 
 class LocalSyncTests(unittest.TestCase):
+    def test_stock_projection_requires_exact_owned_scope_and_excludes_aapl(self):
+        data=document();data['orders']=[{'symbol':'QQQ','clientOrderId':'aibotstkExample'}]
+        data['positions']=[{'symbol':'QQQ'}];self.assertEqual(validate_snapshot(data),data)
+        data['positions'].append({'symbol':'AAPL'})
+        with self.assertRaises(ValueError):validate_snapshot(data)
     def test_new_paper_crypto_requires_its_own_lab_order_scope(self):
         data = document()
         data["orders"] = [{"symbol": "ETHUSD", "clientOrderId": "jsbotmtfexample"}]

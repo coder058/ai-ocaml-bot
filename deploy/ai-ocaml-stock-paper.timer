@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh stock paper connection health and reconcile pending IDs
+
+[Timer]
+# GUESS: # UNCALIBRATED GUESS — minute refresh matches the closed-candle scanner;
+# measure API workload before increasing this operational cadence.
+OnCalendar=*-*-* *:*:00
+Persistent=true
+Unit=ai-ocaml-stock-paper.service
+
+[Install]
+WantedBy=timers.target

@@ -25,6 +25,16 @@ from export_telemetry import (  # noqa: E402
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_stock_scope_requires_owned_namespace_and_keeps_aapl_private(self):
+        rows=[{"id":"owned","client_order_id":"aibotstkExample","symbol":"QQQ","asset_class":"us_equity"},
+              {"id":"private","client_order_id":"aibotstkProtected","symbol":"AAPL","asset_class":"us_equity"},
+              {"id":"external","client_order_id":"manual","symbol":"NVDA","asset_class":"us_equity"}]
+        with patch("export_telemetry.paper_get",return_value=rows):orders,complete,_=broker_orders({})
+        self.assertTrue(complete);self.assertEqual([r["id"] for r in orders],["owned"])
+        positions=public_positions([{"symbol":"QQQ","qty":"1"},{"symbol":"AAPL","qty":"100"},
+                                   {"symbol":"NVDA","qty":"2"}],{"QQQ"})
+        self.assertEqual([p["symbol"] for p in positions],["QQQ"])
+
     def test_multicrypto_public_scope_still_excludes_private_positions(self):
         positions = [{"symbol": "ETHUSD", "qty": "1"}, {"symbol": "AAPL", "qty": "100"},
                      {"symbol": "SOLUSD", "qty": "2"}, {"symbol": "BTCUSD", "qty": "0.1"}]

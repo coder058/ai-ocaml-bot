@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh practice FX connection status
+
+[Timer]
+# GUESS: # UNCALIBRATED GUESS — minute connection polling; measure API workload.
+OnCalendar=*-*-* *:*:00
+Persistent=true
+Unit=ai-ocaml-fx-connection.service
+
+[Install]
+WantedBy=timers.target

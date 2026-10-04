@@ -1,0 +1,15 @@
+[Unit]
+Description=AI OCaml Bot FX practice connection status
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/.venv/bin/python research/oanda_practice.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state

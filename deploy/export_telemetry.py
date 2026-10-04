@@ -62,9 +62,21 @@ def crypto_symbol(value: object) -> str | None:
 
 def lab_order(client_id: object, symbol: object) -> bool:
     canonical = crypto_symbol(symbol)
+    if isinstance(client_id,str) and client_id.startswith("aibotstk") and stock_symbol(symbol):
+        return True
     return isinstance(client_id, str) and canonical is not None and (
         client_id.startswith("jsbotmtf") or
         client_id.startswith("jsbotbtc") and canonical == "BTC/USD")
+
+
+def stock_symbol(value: object) -> str | None:
+    if isinstance(value,str) and value!="AAPL" and re.fullmatch(r"[A-Z0-9][A-Z0-9.-]*",value) and not crypto_symbol(value):
+        return value
+    return None
+
+
+def public_symbol(value: object) -> str | None:
+    return crypto_symbol(value) or stock_symbol(value)
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -117,7 +129,7 @@ def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]],
             continue
         seen_order_ids.add(order_id)
         unique_orders.append(order)
-    owned_symbols = {"BTC/USD"} | {crypto_symbol(order.get("symbol"))
+    owned_symbols = {"BTC/USD"} | {public_symbol(order.get("symbol"))
         for order in unique_orders if lab_order(order.get("client_order_id"), order.get("symbol"))}
     for order in unique_orders:
         order_id = order["id"]
@@ -125,7 +137,7 @@ def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]],
         symbol = order.get("symbol", "")
         # SOURCE: publish this lab's crypto scope and external activity in the
         # same scope so attribution can fail closed. Protected AAPL stays private.
-        if crypto_symbol(symbol) not in owned_symbols:
+        if public_symbol(symbol) not in owned_symbols:
             continue
         projected.append({
             "id": order_id,
@@ -135,6 +147,9 @@ def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]],
             "status": order.get("status", ""),
             "filledQty": order.get("filled_qty", "0"),
             "submittedAt": order.get("submitted_at"),
+            "assetClass": order.get("asset_class"),
+            "orderType": order.get("type"),
+            "timeInForce": order.get("time_in_force"),
         })
     # USD-denominated crypto fee rows do not carry an order ID or symbol. They
     # can only be attributed to the lab when every account crypto order is
@@ -425,7 +440,7 @@ def service_state(credentials: dict[str, str]) -> dict[str, object]:
 
 def public_positions(positions: list[dict[str, object]],
                      owned_symbols: set[str] | None = None) -> list[dict[str, object]]:
-    """Publish only crypto symbols with actual lab orders; exclude private AAPL."""
+    """Publish only symbols with actual lab orders; exclude private AAPL."""
     owned_symbols = owned_symbols if owned_symbols is not None else {"BTC/USD"}
     return [{
         "symbol": str(position.get("symbol", "")),
@@ -436,7 +451,44 @@ def public_positions(positions: list[dict[str, object]],
         "currentPrice": position.get("current_price"),
         "unrealizedPl": position.get("unrealized_pl"),
         "protected": False,
-    } for position in positions if crypto_symbol(position.get("symbol")) in owned_symbols]
+        "assetClass": position.get("asset_class"),
+    } for position in positions if public_symbol(position.get("symbol")) in owned_symbols]
+
+
+def connection_state() -> dict:
+    """Whitelist public connection fields; private broker ledgers never cross SSH."""
+    files={"orderStream":("paper-order-capture.json",("asOf","provider","connected","reason",
+        "lastOrderEventAt","eventCount","orderAuthority","restReconciliationRequired","errorClass")),
+        "stocks":("stock-connection.json",("asOf","provider","product","connected","sessionOpen",
+        "nextOpen","automaticStrategy","executionGateArmed","canSubmitNow","feed","accountReady")),
+        "stockStream":("stock-capture.json",("asOf","provider","product","feed","connected","symbols",
+        "symbolLimit","quoteCount","barCount","orderAuthority","fullNbbo","lastMarketEventAt","reason","errorClass")),
+        "fx":("fx-connection.json",("asOf","provider","product","connected","executionMode","automaticStrategy",
+        "orderAuthority","executionAdapterAvailable","reason","framesRequested","instruments","monitoredPairs","catalogCount")),
+        "catalog":("instrument-catalog.json",("asOf","provider","catalogOnly","stockEtfCount","monitoredStocks",
+        "unavailableRequestedStocks","cryptoAllowed","protectedStocks"))}
+    result={}
+    for name,(filename,keys) in files.items():
+        path=STATE_DIR/filename
+        if not path.exists():continue
+        try:
+            row=json.loads(path.read_text());result[name]={key:row.get(key) for key in keys}
+        except (OSError,ValueError):result[name]={"connected":False,"reason":"connection_status_unreadable"}
+    return result
+
+
+def stock_order_evidence(orders:list[dict],path:Path=STATE_DIR/"stock-paper-events.jsonl") -> dict:
+    by_client={row["clientOrderId"]:row["id"] for row in orders if
+        str(row.get("clientOrderId","")).startswith("aibotstk") and lab_order(row.get("clientOrderId"),row.get("symbol"))}
+    evidence={}
+    if not path.exists():return evidence
+    for line in path.read_text().splitlines():
+        try:row=json.loads(line)
+        except ValueError:continue
+        if row.get("kind")=="DECISION" and row.get("clientOrderId") in by_client:
+            evidence[by_client[row["clientOrderId"]]]={"policy":"explicit_stock_paper_request",
+                "reason":str(row.get("reason","")),"observedAt":str(row.get("at","")),"frame":"manual"}
+    return evidence
 
 
 def multi_order_evidence(orders: list[dict],
@@ -574,7 +626,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
              cache_fees: bool = False) -> dict[str, object]:
     positions = paper_get("/v2/positions", credentials)
     orders, orders_complete, crypto_orders_attributable = broker_orders(credentials)
-    owned_symbols = {"BTC/USD"} | {crypto_symbol(order.get("symbol"))
+    owned_symbols = {"BTC/USD"} | {public_symbol(order.get("symbol"))
         for order in orders if lab_order(order.get("clientOrderId"), order.get("symbol"))}
     fills, fills_complete = broker_fills(credentials, orders)
     crypto_fees = broker_crypto_fees(credentials, crypto_orders_attributable,
@@ -594,7 +646,8 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "fills": fills,
         "fillsComplete": fills_complete,
         "cryptoFees": crypto_fees,
-        "decisionHistory": {**decision_history(decision_events, orders), **multi_order_evidence(orders)},
+        "decisionHistory": {**decision_history(decision_events, orders), **multi_order_evidence(orders),**stock_order_evidence(orders)},
+        "connections":connection_state(),
         "journal": public_journal(events, orders),
         "journalComplete": journal_complete,
     }

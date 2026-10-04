@@ -10,10 +10,10 @@ The Vercel deployment is paused; the local mode is the verified current setup.
 The Dublin VPS runs an OCaml paper order service and an Alpaca US market-data
 collector. The local monitor reads a sanitized broker and journal snapshot
 through SSH; no Alpaca secret is sent to the website. The dashboard
-shows BTC bot orders, fills, position and decision traces. It excludes other
-account holdings and equity. The current result subtracts posted USD crypto
-fees and uses the broker BTC mark; it stays provisional until daily fee
-posting, BTC quantity and closed-lot reconciliation are complete.
+shows lab-owned orders, fills, positions and decision traces. Protected AAPL
+and unrelated account holdings stay private. Results subtract posted USD crypto
+fees and use broker marks; they stay provisional until daily fee posting,
+quantities and closed-lot reconciliation are complete.
 
 A second, read-only collector records public Hyperliquid HIP-3 prices, BBOs and
 1m candle updates for selected FX-like, index, energy and equity contracts.
@@ -24,17 +24,26 @@ This is market-data collection, not a claim that the OCaml executor is HFT.
 ## Current behavior
 
 A shared OCaml batch analyzer now supplies the localhost market radar across
-the five requested frames. Its initial verified universe had 36 crypto/USD
-pairs, 12 listed equities/ETF proxies and 19 HIP-3 contracts. It uses native
+the five requested frames. The 4 October connection check analyzed 91 markets:
+BTC/ETH/SOL, 69 listed stocks/ETF and 19 HIP-3 contracts. The Alpaca catalog
+contained 13,509 active tradable stocks/ETF; catalog availability does not mean
+all are continuously monitored. A separate authenticated free IEX WebSocket
+captures 30 selected stock/ETF symbols. It uses native
 historical warmup, an incremental cache and the actual equity-session calendar.
-New confluence candidates remain descriptive; BTC is still the only broker
-order path. See [the market pipeline](docs/MARKET-PIPELINE.md) and
+New confluence crypto entries remain paused. A separate tested OCaml stocks/ETF
+paper router is connected; no automatic stock strategy is armed. Conventional
+FX requires an OANDA v20 practice account; its data connector currently reports
+missing credentials and has no FX order adapter. Currency ETFs and Hyperliquid
+FX-like perps are labeled as such. See [connections and operations](docs/CONNECTIONS.md),
+[the market pipeline](docs/MARKET-PIPELINE.md) and
 [the ongoing refinement log](docs/EIGHT-HOUR-REFINEMENT.md).
 
 - The Dublin collector archives Alpaca US BTC/USD WebSocket quotes, trades,
   order books, closed-minute bars and later bar revisions with receipt times.
-  It also archives quotes and minute bars for a 15-pair crypto research
-  watchlist selected from paper assets and a same-day data-coverage scan.
+  It also archives ETH and SOL quotes and minute bars. New crypto entries are
+  restricted to BTC, ETH and SOL at the signal and adapter boundaries. Prior
+  bot-owned altcoin positions were wound down in nine broker-filled paper sales
+  on 4 October. Historical captures and executions remain available.
   Only BTC quotes and bars reach OCaml over the local Unix socket; the other
   pairs cannot trigger orders. The [multi-asset research boundary](docs/MULTI-ASSET-RESEARCH.md)
   records the measured market catalog and five requested timeframes. Session IDs and

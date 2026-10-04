@@ -30,6 +30,13 @@ let () =
      Result.is_error (Paper_crypto_broker.canonical "ETH//USD"));
   check "fresh closed signal accepted and legacy BTC excluded"
     (match Multi_paper.signals ~now document with Ok [s] -> s.symbol="ETH/USD" | _ -> false);
+  check "crypto entry universe excludes altcoins"
+    (Paper_crypto_broker.allowed_entry "BTCUSD" && Paper_crypto_broker.allowed_entry "ETH/USD" &&
+     Paper_crypto_broker.allowed_entry "SOL/USD" && not (Paper_crypto_broker.allowed_entry "BONK/USD") &&
+     not (Paper_crypto_broker.allowed_entry "PEPEUSD"));
+  check "altcoin candle signals cannot gain entry authority"
+    (match Multi_paper.signals ~now (change "markets" (`List [market "BONK/USD";market "PEPE/USD"]) document)
+     with Ok [] -> true | _ -> false);
   check "stale/future snapshots rejected"
     (Result.is_error (Multi_paper.signals ~now:(now +. 180.) document) &&
      Result.is_error (Multi_paper.signals ~now:(now -. 60.) document));

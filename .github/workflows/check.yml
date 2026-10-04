@@ -16,6 +16,19 @@ jobs:
       - run: opam install yojson dune -y
       - run: opam exec -- dune build @all
       - run: opam exec -- dune runtest --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r research/requirements.txt cryptography
+      - name: Synthetic paper routing and connection boundaries
+        run: |
+          python -m unittest discover -s test -p test_multi_paper_runtime.py -v
+          python -m unittest discover -s test -p test_stock_paper_runtime.py -v
+          python -m unittest discover -s test -p test_oanda_practice.py -v
+          python -m unittest discover -s test -p test_stock_capture.py -v
+          python -m unittest discover -s test -p test_paper_order_capture.py -v
+          python -m unittest discover -s test -p test_export_telemetry.py -v
+          python -m unittest discover -s test -p test_sync_local_monitor.py -v
   monitor:
     runs-on: ubuntu-latest
     defaults:

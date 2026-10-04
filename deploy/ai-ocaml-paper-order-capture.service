@@ -1,0 +1,21 @@
+[Unit]
+Description=AI OCaml Bot paper broker order update capture
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/.venv/bin/python research/paper_order_capture.py
+Restart=on-failure
+# GUESS: # UNCALIBRATED GUESS — same five-second transport restart as market capture.
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state
+
+[Install]
+WantedBy=multi-user.target

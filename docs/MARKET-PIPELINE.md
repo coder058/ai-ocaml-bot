@@ -12,7 +12,9 @@ flowchart LR
 ```
 
 `research/market_pipeline.py` fetches native 1m, 5m, 30m, 1h and 4h candles.
-The broker's active USD crypto catalog supplies its crypto universe. Listed
+The broker's active USD crypto catalog is filtered to the user's BTC/ETH/SOL
+allowlist. Its equity catalog validates the 69 requested stocks/ETF before
+including them. Listed
 equities/ETFs and selected HIP-3 contracts are separate instruments, with their
 actual venue and class shown. Dow/Nasdaq ETFs are proxies; HIP-3 currency,
 equity and index contracts are perps, not conventional spot currencies,
@@ -59,7 +61,10 @@ ledger. The localhost SSH worker carries only the market-analysis snapshot.
 The Alpaca key stays on Dublin. This scanner has a GET-only paper-origin
 allowlist for catalog/clock/calendar and no order endpoint.
 
-Current execution is still BTC under `quote_cross_30s_v1`. A frame reading is
+Current automatic entries are still BTC under `quote_cross_30s_v1`. The separate
+crypto confluence entry gate is paused; its exits/reconciliation remain active.
+The stock paper router is connected but has no automatic strategy authority.
+A frame reading is
 not a broker order. More analysis does not establish a profitable policy;
 paper fills are simulated and can differ from live execution.
 

@@ -1,0 +1,21 @@
+[Unit]
+Description=AI OCaml Bot stocks ETF paper connection and reconciliation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=TZ=UTC
+Environment=PAPER_STATE_DIR=/home/ubuntu/jsbot-paper-state
+# SOURCE: strategies are deferred; only explicit tested paper requests may be armed.
+Environment=STOCK_PAPER_ORDERS=0
+EnvironmentFile=/etc/jsbot-paper.env
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/_build/default/bin/stock_paper_main.exe --check
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state
+

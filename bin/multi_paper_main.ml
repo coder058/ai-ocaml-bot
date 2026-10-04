@@ -37,6 +37,7 @@ let persist state = atomic ledger_path (Multi_paper.to_json state)
 let pending_fields (pending : Multi_paper.pending) = [
   "clientOrderId",`String pending.client_id; "side",`String pending.side;
   "requestedQty",`Float pending.requested_qty; "limitPrice",`Float pending.limit_price;
+  "quantityText",(match pending.quantity_text with None -> `Null | Some text -> `String text);
   "reason",`String pending.reason; "reading",pending.reading]
 
 let run ~execute () =
@@ -80,16 +81,19 @@ let run ~execute () =
     (* SOURCE: the ledger and decision trace are durable BEFORE the network
        POST. A timeout/unknown response leaves this pending ID unresolved. *)
     event "DECISION" ticket (pending_fields pending);
-    match Paper_crypto_broker.submit ~asset ~side:pending.side ~qty:pending.requested_qty
-      ~limit_price:pending.limit_price ~client_order_id:pending.client_id with
+    let market_exit=Paper_broker.string (Paper_broker.member "orderType" pending.reading)=Some "market" in
+    match Paper_crypto_broker.submit ?qty_text:pending.quantity_text ~market_exit ~asset ~side:pending.side ~qty:pending.requested_qty
+      ~limit_price:pending.limit_price ~client_order_id:pending.client_id () with
     | Error error ->
-      (* SOURCE: HTTP 422 explicitly rejects an invalid Alpaca order. Every
-         other transport/HTTP error remains ambiguous and keeps the pending ID. *)
-      if String.starts_with ~prefix:"HTTP 422:" error then (
+      (* SOURCE: HTTP 400/403/422 explicitly reject bad/forbidden/invalid order
+         requests. Timeouts, duplicate-ID conflicts and server errors remain
+         uncertain and retain the durable ID for broker reconciliation. *)
+      if List.exists (fun prefix -> String.starts_with ~prefix error)
+          ["HTTP 400:"; "HTTP 403:"; "HTTP 422:"] then (
         let next = {ticket with pending=None; closed=(pending.side="buy")} in
-        replace next; event "REJECTED" next (pending_fields pending);
-        failure ticket.symbol "Broker rejected order (HTTP 422); this signal is not retried")
-      else (event "UNCERTAIN" ticket (pending_fields pending);
+        replace next; event "REJECTED" next (("brokerError",`String error)::pending_fields pending);
+        failure ticket.symbol "Broker rejected order; rejection saved and this signal is not retried")
+      else (event "UNCERTAIN" ticket (("brokerError",`String error)::pending_fields pending);
         failure ticket.symbol "Order response uncertain; pending ID retained")
     | Ok order ->
       event "ACK" ticket ["clientOrderId",`String pending.client_id];
@@ -128,6 +132,16 @@ let run ~execute () =
     match Paper_crypto_broker.asset symbol, current symbol with
     | Ok asset, Some (qty,quote) -> Some (asset,qty,quote)
     | _ -> failure symbol "Asset preflight unavailable"; None in
+  let exact_quantity asset amount =
+    Result.bind (Exact_decimal.of_string asset.Paper_crypto_broker.step_text) (fun step ->
+      Result.bind (Exact_decimal.floor_grid amount step) (fun value ->
+        Ok (Exact_decimal.to_float value, Exact_decimal.to_string value))) in
+  let exit_quantity (ticket : Multi_paper.ticket) asset =
+    match positions with
+    | Error error -> Error error
+    | Ok rows -> Result.bind (Paper_crypto_broker.quantity_exact ticket.symbol rows) (fun available ->
+      Result.bind (Exact_decimal.of_float ticket.owned_max) (fun owned ->
+        exact_quantity asset (Int64.min available owned))) in
   let with_quote reading (quote : Paper_crypto_broker.quote) =
     `Assoc (["triggerBid",`Float quote.bid; "triggerAsk",`Float quote.ask;
       "triggerQuoteTime",`String quote.timestamp;
@@ -144,6 +158,34 @@ let run ~execute () =
     | _ -> `Assoc [] in
   (* SOURCE: exits precede entries; only this experiment's owned quantity can
      be sold. Broker fee debits may reduce inventory, but cannot increase it. *)
+  (* SOURCE: the user removed all crypto except BTC/ETH/SOL. This gate only
+     winds down existing owned excluded assets, without a candle strategy. *)
+  let wind_down=armed && Sys.getenv_opt "MULTI_PAPER_WIND_DOWN_EXCLUDED"=Some "1" in
+  if wind_down then List.iter (fun (ticket:Multi_paper.ticket) ->
+    if ticket.pending=None && not (Paper_crypto_broker.allowed_entry ticket.symbol) then
+      match positions,orders with
+      | Ok rows,Ok open_orders when not (Paper_crypto_broker.has_open_order ticket.symbol open_orders) ->
+        (match Paper_crypto_broker.quantity_exact ticket.symbol rows,Exact_decimal.of_float ticket.owned_max with
+         | Ok available,Ok owned when available<=owned ->
+           if available=Exact_decimal.zero then (
+             replace {ticket with closed=true};event "FLAT" ticket [])
+           else (match Paper_crypto_broker.asset ticket.symbol with
+           | Error error -> failure ticket.symbol error
+           | Ok asset -> (match exit_quantity ticket asset with
+             | Error error -> failure ticket.symbol error
+             | Ok (qty,quantity_text) when qty>=asset.minimum && account_ok "sell" ->
+               let reason="User universe change: wind down excluded crypto owned by this paper lab" in
+               let reference=Option.value ~default:ticket.stop ticket.entry_price in
+               let reading=`Assoc ["orderType",`String "market";
+                 "executionPurpose",`String "authorized universe wind-down"] in
+               let next,updated=Multi_paper.exit ~quantity_text ~reading !state ticket
+                 ~now:(Unix.gettimeofday ()) ~qty ~price:reference
+                 ~quote_time:(Multi_paper.stamp (Unix.gettimeofday ())) ~reason in
+               state:=next;persist next;transmit updated asset
+             | Ok _ -> failure ticket.symbol "Excluded owned dust is below minimum order quantity"))
+         | _ -> failure ticket.symbol "Wind-down blocked: inventory unavailable or exceeds owned fills")
+      | _ -> failure ticket.symbol "Wind-down blocked by open orders or unavailable broker state")
+      (Multi_paper.active_tickets !state);
   List.iter (fun (original : Multi_paper.ticket) ->
     match Multi_paper.ticket_for !state original.symbol with
     | Some ticket when ticket.pending = None ->
@@ -152,7 +194,7 @@ let run ~execute () =
          failure ticket.symbol "Broker inventory exceeds owned quantity; external activity suspected"
        | Some (qty,_) when qty=0. ->
          replace {ticket with closed=true}; event "FLAT" ticket []
-       | Some (qty,quote) ->
+       | Some (_,quote) ->
          (match Multi_paper.exit_reason ~now:(Unix.gettimeofday ()) ticket quote document with
           | None -> ()
           | Some _ when ticket.last_exit_quote = Some quote.timestamp -> ()
@@ -160,16 +202,18 @@ let run ~execute () =
             (match Paper_crypto_broker.asset ticket.symbol with
              | Error _ -> failure ticket.symbol "Exit asset increments unavailable"
              | Ok asset ->
-            let quantity = Paper_crypto_broker.floor_increment (min qty ticket.owned_max) asset.step in
+            (match exit_quantity ticket asset with
+             | Error error -> failure ticket.symbol ("Exact exit quantity: " ^ error)
+             | Ok (quantity,quantity_text) ->
             let price = Paper_crypto_broker.floor_increment quote.bid asset.tick in
             if quantity < asset.minimum then
               failure ticket.symbol "Owned dust is below the broker's minimum order quantity"
             else if armed && account_ok "sell" &&
                 Multi_paper.quote_fresh ~now:(Unix.gettimeofday ()) quote then (
-              let next,ticket = Multi_paper.exit ~reading:(with_quote (origin_reading ticket) quote)
+              let next,ticket = Multi_paper.exit ~quantity_text ~reading:(with_quote (origin_reading ticket) quote)
                 !state ticket ~now:(Unix.gettimeofday ())
                 ~qty:quantity ~price ~quote_time:quote.timestamp ~reason in
-              state := next; persist next; transmit ticket asset)))
+              state := next; persist next; transmit ticket asset))))
        | None -> ())
     | _ -> ()) (Multi_paper.active_tickets !state);
   List.iter (fun (signal : Multi_paper.signal) ->
@@ -179,7 +223,12 @@ let run ~execute () =
         failure signal.symbol "Existing inventory is not owned by this experiment"
       | Some (asset,_,quote) ->
         let price = Paper_crypto_broker.ceil_increment quote.ask asset.tick in
-        let qty = Paper_crypto_broker.floor_increment (Multi_paper.entry_usd /. price) asset.step in
+        let exact_entry = Result.bind (Exact_decimal.of_float Multi_paper.entry_usd) (fun budget ->
+          Result.bind (Exact_decimal.of_float price) (fun limit ->
+            Result.bind (Exact_decimal.ratio budget limit) (exact_quantity asset))) in
+        (match exact_entry with
+        | Error error -> failure signal.symbol ("Exact entry quantity: " ^ error)
+        | Ok (qty,quantity_text) ->
         if signal.stop >= quote.bid then failure signal.symbol "Signal is already invalidated at the latest bid"
         else if qty < asset.minimum then failure signal.symbol "Entry is below the broker's minimum quantity"
         else if armed && account_ok "buy" &&
@@ -188,9 +237,9 @@ let run ~execute () =
              | Ok current -> List.exists (fun (s : Multi_paper.signal) ->
                  s.symbol=signal.symbol && s.frame=signal.frame && s.bar=signal.bar) current
              | Error _ -> false) then (
-          let next,ticket = Multi_paper.entry !state {signal with reading=with_quote signal.reading quote}
+          let next,ticket = Multi_paper.entry ~quantity_text !state {signal with reading=with_quote signal.reading quote}
             ~now:(Unix.gettimeofday ()) ~qty ~price in
-          state := next; persist next; transmit ticket asset)
+          state := next; persist next; transmit ticket asset))
       | None -> ()) entry_signals;
   let result = `Assoc ["asOf",`String (Multi_paper.stamp (Unix.gettimeofday ()));
     "mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
