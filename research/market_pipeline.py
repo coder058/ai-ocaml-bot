@@ -23,6 +23,7 @@ from hyperliquid_capture import COINS
 from stream_capture import credentials as stream_credentials
 from murphy_analysis import enrich, required_seed_bars, forward_reading
 from primary_trend_context import collect as collect_primary_context
+from decision_quote_capture import collect as collect_decision_quotes
 
 # SOURCE: requested timeframes and official Alpaca / Hyperliquid interval names.
 FRAMES = {"1m": (1, "1Min"), "5m": (5, "5Min"), "30m": (30, "30Min"),
@@ -379,11 +380,28 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
         raise RuntimeError("shared OCaml analysis failed")
     result = json.loads(proc.stdout)
     enrich(result, requested, {name: minutes for name, (minutes, _) in FRAMES.items()})
+    quote_references, quote_errors = collect_decision_quotes(request, universes, credentials)
+    errors.extend(quote_errors)
+    seen_quotes = cache.setdefault("recordedQuoteReferences", {})
+    with output.with_name("market-quotes-reference.jsonl").open("a", encoding="utf-8") as target:
+        for key, quote in quote_references.items():
+            identity = (quote.get("quoteAt"), quote.get("bid"), quote.get("ask"))
+            if quote.get("quoteAt") and seen_quotes.get(key) != list(identity):
+                target.write(json.dumps(quote, separators=(",", ":"), allow_nan=False) + "\n")
+                seen_quotes[key] = list(identity)
+        target.flush()
+        os.fsync(target.fileno())
     for row, original in zip(result["markets"], requested, strict=True):
         row["category"] = original["category"]
         row["fetches"] = original["fetches"]
         row["execution"] = "Alpaca paper quote_cross_30s_v1" if row["symbol"] == "BTC/USD" else "analysis_only"
         row["dataSource"] = "native_historical_as_retrieved"
+        quote = quote_references.get(row["venue"] + "|" + row["symbol"],
+            {"status": "unconnected", "purpose": "observed_quote_reference_not_execution", "orderAuthority": False, "winProbability": None})
+        for reading in row["frames"].values():
+            # Freeze actual bid/ask known at this scan. Never backfill the
+            # previous first-observed feature row with a later market price.
+            reading["quoteReference"] = quote
     result.update({"retrievedAt": utc(datetime.now(timezone.utc)), "errors": errors,
                    "processingSeconds": time.monotonic() - started,
                    "marketsAnalyzed": len(requested),

@@ -29,6 +29,19 @@ test("all 455 cells distinguish the separate BTC engine, paused entries, stocks 
   assert.equal(executionView(null, now), null);
 });
 
+test("observed quote reference never replaces risk readiness or historical order evidence", () => {
+  const t=fixture(); const r=t.marketPipeline.markets[1].frames['30m'];
+  r.quoteReference={purpose:'observed_quote_reference_not_execution',orderAuthority:false,winProbability:null,status:'stale',feed:'synthetic',quoteAt:at,receivedAt:at,bid:100,ask:101};
+  const row=executionView(t,now).rows.find(r=>r.symbol==='ETH/USD'&&r.frame==='30m');
+  const stage=row.steps.find(s=>s.stage==='Observed bid / ask reference');
+  assert.equal(stage.state,'context');assert.match(stage.detail,/status at reception stale/);
+  assert.match(stage.detail,/not a fill/);
+  assert.equal(row.steps.find(s=>s.stage==='Risk / ownership').state,'unknown');
+  assert.equal(executionView(t,now).orders.length,0);
+  r.quoteReference.orderAuthority=true;
+  assert.equal(executionView(t,now).rows.find(r=>r.symbol==='ETH/USD'&&r.frame==='30m').steps.find(s=>s.stage==='Observed bid / ask reference').state,'unknown');
+});
+
 test("stale or future runtime/analysis never reports current gate readiness or a current candidate", () => {
   for (const invalid of ["2026-10-04T18:00:00Z", "2026-10-05T00:00:00Z", "not a time"]) {
     const t = fixture();

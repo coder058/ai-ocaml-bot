@@ -61,6 +61,7 @@ export type JournalEvent = {
 
 export type FrameName = "1m" | "5m" | "30m" | "1h" | "4h";
 export type FrameReading = {
+  quoteReference?: Record<string, unknown>;
   status:
     | "invalid"
     | "no_data"
