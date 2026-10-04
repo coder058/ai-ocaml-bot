@@ -49,4 +49,4 @@ try {
 } finally {
     $env:AI_OCAML_MONITOR_TELEMETRY_FILE = $previousFileSetting
 }
-Write-Output 'Monitor started at http://127.0.0.1:3000. Data refreshes every five minutes while this computer is on.'
+Write-Output 'Monitor started at http://127.0.0.1:3000. Broker fetches repeat after a 60-second pause while this computer is on.'

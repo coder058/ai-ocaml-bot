@@ -9,6 +9,9 @@ export type PaperOrder = {
   status: string;
   filledQty: string;
   submittedAt: string | null;
+  assetClass?: string;
+  orderType?: string;
+  timeInForce?: string;
 };
 
 export type PaperFill = {
@@ -30,10 +33,14 @@ export type PaperPosition = {
   currentPrice?: string | null;
   unrealizedPl?: string | null;
   protected: boolean;
+  assetClass?: string;
 };
 
 export type CryptoFeeSummary = {
-  assetFees?: Record<string, { qty: string; valueAtActivityPriceUsd: string; rows: number }>;
+  assetFees?: Record<
+    string,
+    { qty: string; valueAtActivityPriceUsd: string; rows: number }
+  >;
   pagesComplete: boolean;
   attributedToBot: boolean;
   activityRows: number;
@@ -54,7 +61,14 @@ export type JournalEvent = {
 
 export type FrameName = "1m" | "5m" | "30m" | "1h" | "4h";
 export type FrameReading = {
-  status: "invalid" | "no_data" | "stale" | "warming" | "ready" | "candidate" | "market_closed";
+  status:
+    | "invalid"
+    | "no_data"
+    | "stale"
+    | "warming"
+    | "ready"
+    | "candidate"
+    | "market_closed";
   reason: string;
   completeBars?: number;
   contiguousTailBars?: number;
@@ -81,8 +95,13 @@ export type MarketPipeline = {
   marketsAnalyzed: number;
   currentCandidates: number;
   brokerOrderSymbols: string[];
-  markets: { symbol: string; venue: string; category: string; execution: string;
-    frames: Record<FrameName, FrameReading> }[];
+  markets: {
+    symbol: string;
+    venue: string;
+    category: string;
+    execution: string;
+    frames: Record<FrameName, FrameReading>;
+  }[];
   errors: { venue: string; symbol?: string; frame?: string; error: string }[];
 };
 
@@ -90,16 +109,74 @@ export type PaperTelemetry = {
   version: 1;
   generatedAt: string;
   source: "Dublin OCaml paper service";
+  connections?: {
+    stocks?: {
+      asOf: string;
+      connected: boolean;
+      accountReady?: boolean;
+      sessionOpen: boolean;
+      nextOpen: string;
+      automaticStrategy: boolean;
+      executionGateArmed: boolean;
+      canSubmitNow: boolean;
+      feed: string;
+    };
+    stockStream?: {
+      asOf: string;
+      connected: boolean;
+      symbols: string[];
+      quoteCount: number;
+      barCount: number;
+      lastMarketEventAt: string | null;
+      reason: string;
+      fullNbbo: false;
+    };
+    orderStream?: {
+      asOf: string;
+      connected: boolean;
+      eventCount: number;
+      lastOrderEventAt: string | null;
+      reason: string;
+    };
+    fx?: {
+      asOf: string;
+      connected: boolean;
+      reason: string;
+      catalogCount: number | null;
+      monitoredPairs: string[] | null;
+      executionAdapterAvailable: boolean;
+      orderAuthority: false;
+    };
+    catalog?: {
+      asOf: string;
+      stockEtfCount: number;
+      monitoredStocks: string[];
+      cryptoAllowed: string[];
+    };
+  };
   marketPipeline?: MarketPipeline;
   multiPaper?: {
-    asOf: string; mode: "OBSERVE" | "PAPER_EXPERIMENT";
+    asOf: string;
+    mode: "OBSERVE" | "PAPER_EXPERIMENT";
     newEntriesEnabled?: boolean;
-    policy: string; calibrated: false; winProbability: null;
-    entryUsd: number; maxOpenTickets: number; eligibleLongSignals: number;
-    activeTickets: { symbol: string; frame: FrameName; bar: string;
-      entryClientOrderId: string; invalidationLevel: number; ownedMaximumQty: number;
-      entryAveragePrice: number | null; entryFilledQty: number; exitFilledQty: number;
-      pending: { clientOrderId: string; side: string; reason: string } | null }[];
+    policy: string;
+    calibrated: false;
+    winProbability: null;
+    entryUsd: number;
+    maxOpenTickets: number;
+    eligibleLongSignals: number;
+    activeTickets: {
+      symbol: string;
+      frame: FrameName;
+      bar: string;
+      entryClientOrderId: string;
+      invalidationLevel: number;
+      ownedMaximumQty: number;
+      entryAveragePrice: number | null;
+      entryFilledQty: number;
+      exitFilledQty: number;
+      pending: { clientOrderId: string; side: string; reason: string } | null;
+    }[];
     abstentions: { symbol: string; reason: string }[];
     stopHandling: string;
   };
@@ -139,13 +216,16 @@ export type PaperTelemetry = {
 export function isTelemetry(value: unknown): value is PaperTelemetry {
   if (!value || typeof value !== "object") return false;
   const data = value as Record<string, unknown>;
-  return data.version === 1 &&
+  return (
+    data.version === 1 &&
     typeof data.generatedAt === "string" &&
     data.source === "Dublin OCaml paper service" &&
-    Array.isArray(data.positions) && Array.isArray(data.orders) &&
+    Array.isArray(data.positions) &&
+    Array.isArray(data.orders) &&
     Array.isArray(data.journal) &&
     typeof data.ordersComplete === "boolean" &&
-    typeof data.journalComplete === "boolean";
+    typeof data.journalComplete === "boolean"
+  );
 }
 
 export async function getTelemetry(): Promise<PaperTelemetry | null> {

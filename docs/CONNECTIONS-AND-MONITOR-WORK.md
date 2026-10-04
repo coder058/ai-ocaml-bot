@@ -8,7 +8,7 @@ Work inline. Spend at least one hour on connections/paper execution and then at 
 
 - Start verified with UTC clock: 2026-10-04T14:12:09Z (16:12 Madrid).
 - Connection phase must continue at least until 15:12:09Z.
-- Monitor phase starts after the connection phase; record its actual start and work, and continue for at least one hour after that start.
+- Actual monitor phase start: 2026-10-04T15:12:14Z; continue through at least 16:12:14Z.
 - Do not equate elapsed time with engineering work. Record finished changes, checks, blockers and deployments below.
 
 ## Decisions
@@ -47,10 +47,25 @@ Work inline. Spend at least one hour on connections/paper execution and then at 
 - Alpaca paper `trade_updates` authenticated and subscription was confirmed. Private lab-only order journal plus sanitized connection telemetry added; full REST history remains authoritative.
 - OANDA practice-only data connector, account-specific FX catalog and closed-candle transport prepared. Four synthetic tests passed. Actual state: `practice_credentials_missing`. It has no FX execution adapter. Interactive secure installer is available on Dublin; a practice account/token is still required from the user.
 - Full OCaml build/unit checks passed; six candle pipeline checks, two crypto stream checks, two IEX subscription checks, two paper order projection checks, fifteen exporter checks and six local transport checks passed in the stated environments.
-- Connection telemetry is now carried to the localhost snapshot. Vercel uploads remain disabled. Monitor phase has not started yet.
+- Connection telemetry is now carried to the localhost snapshot. Vercel uploads remain disabled. Monitor phase started at 15:12:14 UTC after the connection hour and public CI verification.
 - Connection commit `4360ee9` was pushed to the public AI OCaml Bot repo; GitHub CI completed successfully at 15:09:26 UTC, including OCaml build/unit checks, synthetic routing/connection tests and existing web tests/typecheck/build.
 - At 15:07 UTC all 69 monitored stocks were confirmed fractionable. A subsequent scanner run took 25.6714 seconds and reported no provider errors, but some short frames were warming, stale or missing. The monitor must expose these states instead of implying all 455 frames are ready.
 
 ## Remaining risk
 
 Paper results do not establish live fill quality or profitability. Strategy work is deferred. Missing practice credentials or testnet funding can prevent broker FX execution even when public data is accessible.
+
+## Monitor evidence in progress
+
+- Studied public eJournal/OpenTerminal feature documentation; wrote original desk components, without copying terminal source.
+- Replaced the single crowded view with Overview, Closed trades, Orders & fills, Markets and Connections. Desktop tables and narrow position/history cards expose P&L, quantities, fills and reason controls.
+- Actual complete broker history matched 1,647 FIFO partial closures with no unmatched sells in the 15:34 snapshot. These are gross matched fill closures, not 1,647 profitable/settled trades. Fees cannot be assigned precisely per closure.
+- Added real snapshot P&L collection, serialized duplicate protection, restart persistence and recovery after truncated append tails. Collection runs while the localhost API is polled; no pre-existing equity curve was invented.
+- Read-only HTTP CSV export returned 200 and 1,511 BTC matched closure rows at the 15:50 check. Instrument, policy, UTC date, side and no-fill filters were tested; unrelated AAPL is excluded.
+- Independent Decimal audit at 15:50:07 UTC: cash flow -210.705471231843439442 USD, broker marks 101.189262 USD, posted USD fees -93.56 USD; net marked -203.076209231843439442 USD. This reconciles the displayed rounded value for that snapshot only and remains provisional.
+- Twenty-four web tests passed, including FIFO partial quantities, invalid/oversold history, duplicate fills, external activity, fee attribution, CSV filtering and persisted real observations. Typecheck/build verification is recorded with the final release below.
+- Dublin service checks at 15:52 UTC: paper executor, crypto/Hyperliquid collectors, multi-market scanner, stock/order streams and stock/FX connection timers active. Public uploads disabled. No FX practice credentials have been supplied and no stock strategy was armed.
+
+## Remaining connection blocker
+
+Conventional FX is not connected to a broker. The practice-only data connector and secure installer are reviewable on Dublin, but require an eligible OANDA v20 demo account/token. Its FX order adapter is still future work. Hyperliquid mainnet remains public data; testnet's observed two FX-like products do not provide ten conventional FX pairs. Do not claim all market execution paths are complete.

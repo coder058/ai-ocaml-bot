@@ -85,9 +85,9 @@ FX-like perps are labeled as such. See [connections and operations](docs/CONNECT
 - `--research-once` reads closed BTC, ETH and SOL candles from Pattern Forge
   for descriptive 5m, 1h and 1d context. This path cannot authorize orders.
 - Raw captures stay on Dublin; the public monitor receives signed summaries,
-  BTC orders/fills and selected per-order journal events. Account-wide balances
+  lab-scoped crypto/stock orders, fills and selected per-order decision events. Account-wide balances
   and unrelated holdings stay out of the public projection.
-- `web/` contains the Vercel paper monitor. Dublin exports broker snapshots
+- `web/` contains the localhost-first paper monitor; its earlier Vercel upload is disabled. Dublin exports broker snapshots
   and the journal with Ed25519 signatures; Vercel never receives Alpaca keys.
 
 The quote-cross strategy rule remains **uncalibrated**. The user specified the
@@ -117,6 +117,25 @@ their own domains. See [the live-paper runbook](docs/LIVE-PAPER.md),
 [public HFT-lab plan](docs/PUBLIC-HFT-LAB-PLAN.md). The plan marks future work
 and acceptance gates; it does not claim unbuilt steps are implemented.
 
+## Trading desk
+
+The localhost desk separates **Overview**, **Closed trades**, **Orders & fills**,
+**Markets** and **Connections**. It shows actual open quantities/marks/unrealized
+P&L, FIFO matched closing fills before fees, broker attempts and partial fills,
+and the retained reason behind each order. Filters cover instrument, policy,
+UTC dates and order side; CSV exports retain the entire filtered history.
+
+Net marked P&L is fill cash flow + broker inventory marks + posted USD fees.
+The displayed realized/posted-cost component is that provisional total minus
+broker open-position unrealized P&L, not settled per-trade net P&L. Asset fees
+and delayed posting prevent a claim of fully reconciled closed returns.
+
+The P&L curve stores real snapshots in `.local/performance.jsonl` when the local
+API is polled. It starts at the first recorded snapshot; it is not a backtest,
+and closing the monitor stops these local chart observations. Dublin data
+capture and the deployed paper service continue independently. See the
+[monitor guide](docs/TRADING-DESK.md).
+
 ## Build and test
 
 ### Local paper monitor (Windows)
@@ -124,7 +143,7 @@ and acceptance gates; it does not claim unbuilt steps are implemented.
 Run `deploy/start_local_monitor.ps1` from PowerShell. It builds the web app,
 fetches the public broker projection through the existing Dublin SSH connection,
 and starts the monitor at **http://127.0.0.1:3000**. The SSH refresh worker runs
-every five minutes while this computer is on. Alpaca credentials stay on Dublin;
+after each broker fetch plus a 60-second pause while this computer is on. Alpaca credentials stay on Dublin;
 the web app reads `.local/telemetry.json` and disables its Blob ingestion route.
 No Vercel plan or Blob storage is required for this local mode.
 
@@ -133,7 +152,7 @@ service stays active. See [local monitor operations](docs/LOCAL-MONITOR.md).
 
 Runtime PID files and logs are in the Git-ignored `.local/` directory. A failed
 refresh retains the previous snapshot, whose timestamp stays visible in the UI;
-the UI marks snapshots older than ten minutes as stale. The local file carries
+the UI warns when snapshots are older than two minutes (an uncalibrated operational threshold). The local file carries
 the full fetched history and its completeness flags, without the Vercel 1 MiB
 upload guard. Posted fees may still lag; the displayed paper result remains
 indicative until broker accounting is reconciled.
