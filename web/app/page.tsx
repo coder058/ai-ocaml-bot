@@ -537,6 +537,20 @@ export default function Home() {
     setView(v);
     setPage(0);
   };
+  const inspectOrder = (id: string) => {
+    const order = byId.get(id);
+    setSymbol(
+      order
+        ? (marketSymbol(order.symbol) ?? "All instruments")
+        : "All instruments",
+    );
+    setPolicy("All policies");
+    setFrom("");
+    setTo("");
+    setSide("Executions");
+    setSelectedId(id);
+    switchView("Orders & fills");
+  };
   const filters = (
     <div className="toolbar">
       <label>
@@ -893,17 +907,23 @@ export default function Home() {
                       partial closures can span multiple rows.
                     </p>
                   </div>
-                  <button onClick={() => switchView("Closed trades")}>
+                  <button
+                    onClick={() => {
+                      setSymbol("All instruments");
+                      setPolicy("All policies");
+                      setFrom("");
+                      setTo("");
+                      setSelectedId(null);
+                      switchView("Closed trades");
+                    }}
+                  >
                     Full closed history →
                   </button>
                 </div>
                 <div className="table-scroll history-table">
                   <ClosedCards
                     rows={(ledger?.closed ?? []).slice(0, RECENT_CLOSURES)}
-                    onInspect={(id) => {
-                      setSelectedId(id);
-                      switchView("Orders & fills");
-                    }}
+                    onInspect={inspectOrder}
                   />
                   <table className="desk-table">
                     <thead>
@@ -932,10 +952,7 @@ export default function Home() {
                             </td>
                             <td>
                               <button
-                                onClick={() => {
-                                  setSelectedId(c.exitOrderId);
-                                  switchView("Orders & fills");
-                                }}
+                                onClick={() => inspectOrder(c.exitOrderId)}
                               >
                                 Why it exited
                               </button>
@@ -983,10 +1000,7 @@ export default function Home() {
                       safePage * PAGE_SIZE,
                       (safePage + 1) * PAGE_SIZE,
                     )}
-                    onInspect={(id) => {
-                      setSelectedId(id);
-                      switchView("Orders & fills");
-                    }}
+                    onInspect={inspectOrder}
                   />
                   <table className="desk-table">
                     <thead>
@@ -1017,18 +1031,12 @@ export default function Home() {
                             </td>
                             <td>
                               <button
-                                onClick={() => {
-                                  setSelectedId(c.entryOrderId);
-                                  switchView("Orders & fills");
-                                }}
+                                onClick={() => inspectOrder(c.entryOrderId)}
                               >
                                 Entry
                               </button>{" "}
                               <button
-                                onClick={() => {
-                                  setSelectedId(c.exitOrderId);
-                                  switchView("Orders & fills");
-                                }}
+                                onClick={() => inspectOrder(c.exitOrderId)}
                               >
                                 Exit
                               </button>
