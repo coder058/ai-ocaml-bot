@@ -38,3 +38,11 @@ User requested six more hours on 2026-10-04. Follow-up scheduled every 30 minute
 - Read all ten HIP-3 dex metadata catalogs via official public info calls. Currency-token candidates only matched existing EUR/JPY/GBP and xyz:NOK; NOK must not be assumed FX (the symbol is also Nokia). No expansion or real-wallet action was performed based on ticker matching. New public catalog evidence is not a connected execution adapter.
 - Optional practice FX account question is pending; user credentials must never be pasted into chat. Continue independent chart/data/evaluation work while waiting.
 - Screenshot proof: local ignored file .local/murphy-eur-chart.png. Monitor broker history remains hidden and CSV endpoint 410.
+
+## Verification completed at 18:55 UTC
+
+- Public commit e9d7488 pushed; GitHub CI 37226169503 passed both jobs (OCaml build/unit tests, routing/connection boundaries, Python pattern/pipeline checks and web tests/typecheck/build).
+- Provider concise annotations confirm xyz:EUR=EURUSD, xyz:JPY=USDJPY and xyz:GBP=GBPUSD under category fx. xyz:NOK is category stocks, display NOK, keywords Nokia/telecom. No FX expansion from false ticker matching.
+- Historical SIP entitlement tested read-only for sparse FX ETF charts, using end at least 15 minutes old as Alpaca's Market Data FAQ specifies. Actual 2026-10-01 onward response counts: 1m FXA 29, FXB 18, FXC 69; 5m FXA 27, FXB 17, FXC 52. These are sparse trade bars, not a continuous spot-FX feed. No main cache/feed changed; no missing minute candles invented. Next work should separate chart history from contiguous indicator warmup, and keep IEX/SIP provenance explicit instead of mixing volume streams.
+- Browser expansion verified on desktop and normal 561px viewport. Normal layout uses horizontal frame strips, no page overflow. All 455 chart cards remain accessible; expanded dialog shows ten Murphy panels, 61 catalog rows, 113 indicator rows and true OHLCV readout. Saved proof .local/murphy-eur-chart.png.
+- The current full market projection measured 16.94 MB / 2.31 s locally. Further reduction should be driven by measured client memory and latency, not guessed performance claims.
