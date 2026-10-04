@@ -3,10 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   assetUnit,
-  cryptoSymbol,
   marketSymbol,
   botAccounting,
-  botExecutions,
   botFills,
   botOrders,
   decisionForOrder,
@@ -39,8 +37,17 @@ const money = (value: number | string | null | undefined, digits = 2) => {
       }).format(number);
 };
 // GUESS: # UNCALIBRATED GUESS — up to nine display decimals for sub-dollar prices; no order rounding.
-const price = (v: number | string | null | undefined) =>
-  money(v, v != null && Number(v) < 1 ? 9 : 2);
+const price = (v: number | string | null | undefined) => {
+  const n = Number(v);
+  return v == null || !Number.isFinite(n)
+    ? "—"
+    : new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: n < 1 ? 9 : 2,
+      }).format(n);
+};
 const signedMoney = (value: number | string | null | undefined, digits = 2) => {
   const number = Number(value);
   return value == null || !Number.isFinite(number)
@@ -513,6 +520,12 @@ export default function Home() {
     !!t &&
     Date.now() - Date.parse(t.generatedAt) >= 0 &&
     Date.now() - Date.parse(t.generatedAt) < 120_000;
+  // GUESS: # UNCALIBRATED GUESS — two minutes is also the per-connection warning,
+  // not a measured feed guarantee. Display the source timestamp separately.
+  const connectionFresh = (at: string | undefined | null) =>
+    !!at &&
+    Date.now() - Date.parse(at) >= 0 &&
+    Date.now() - Date.parse(at) < 120_000;
   const result = accounting?.markedResultAfterPostedFees ?? null;
   const pending = orders.filter(
     (o) =>
@@ -533,6 +546,7 @@ export default function Home() {
           onChange={(e) => {
             setSymbol(e.target.value);
             setPage(0);
+            setSelectedId(null);
           }}
         >
           <option>All instruments</option>
@@ -548,6 +562,7 @@ export default function Home() {
           onChange={(e) => {
             setPolicy(e.target.value);
             setPage(0);
+            setSelectedId(null);
           }}
         >
           <option>All policies</option>
@@ -564,6 +579,7 @@ export default function Home() {
             onChange={(e) => {
               setSide(e.target.value);
               setPage(0);
+              setSelectedId(null);
             }}
           >
             {[
@@ -586,6 +602,7 @@ export default function Home() {
           onChange={(e) => {
             setFrom(e.target.value);
             setPage(0);
+            setSelectedId(null);
           }}
         />
       </label>
@@ -597,6 +614,7 @@ export default function Home() {
           onChange={(e) => {
             setTo(e.target.value);
             setPage(0);
+            setSelectedId(null);
           }}
         />
       </label>
@@ -607,6 +625,7 @@ export default function Home() {
           setFrom("");
           setTo("");
           setPage(0);
+          setSelectedId(null);
         }}
       >
         Reset
@@ -1180,6 +1199,7 @@ export default function Home() {
                 {[
                   {
                     title: "Alpaca stocks / ETF",
+                    checkedAt: t.connections?.stocks?.asOf,
                     ok: t.connections?.stocks?.connected,
                     description: t.connections?.stocks?.sessionOpen
                       ? "Market session open"
@@ -1188,12 +1208,14 @@ export default function Home() {
                   },
                   {
                     title: "Stock real-time feed · IEX",
+                    checkedAt: t.connections?.stockStream?.asOf,
                     ok: t.connections?.stockStream?.connected,
                     description: `${t.connections?.stockStream?.symbols?.length ?? 0} subscriptions · ${t.connections?.stockStream?.quoteCount ?? 0} received quotes`,
                     detail: `IEX only, not consolidated NBBO. Last market event: ${fullTime(t.connections?.stockStream?.lastMarketEventAt)}.`,
                   },
                   {
                     title: "Alpaca broker order updates",
+                    checkedAt: t.connections?.orderStream?.asOf,
                     ok: t.connections?.orderStream?.connected,
                     description:
                       t.connections?.orderStream?.reason ??
@@ -1202,6 +1224,7 @@ export default function Home() {
                   },
                   {
                     title: "Crypto · BTC / ETH / SOL only",
+                    checkedAt: t.capture?.lastEventAt,
                     ok: t.capture?.active,
                     description: t.capture?.active
                       ? "Public market capture running"
@@ -1211,6 +1234,7 @@ export default function Home() {
                   },
                   {
                     title: "Hyperliquid public data",
+                    checkedAt: t.marketPipeline?.asOf,
                     ok: !!t.marketPipeline?.markets.some(
                       (m) =>
                         m.venue === "Hyperliquid HIP-3" &&
@@ -1226,6 +1250,7 @@ export default function Home() {
                   },
                   {
                     title: "Spot FX · OANDA practice",
+                    checkedAt: t.connections?.fx?.asOf,
                     ok: t.connections?.fx?.connected,
                     description: t.connections?.fx?.reason ?? "Not configured",
                     detail:
@@ -1233,12 +1258,23 @@ export default function Home() {
                   },
                 ].map((c) => (
                   <article className="connection-card" key={c.title}>
-                    <span className={c.ok ? "positive" : "negative"}>
-                      {c.ok ? "CONNECTED" : "BLOCKED / UNAVAILABLE"}
+                    <span
+                      className={
+                        c.ok && connectionFresh(c.checkedAt)
+                          ? "positive"
+                          : "negative"
+                      }
+                    >
+                      {c.ok && connectionFresh(c.checkedAt)
+                        ? "CONNECTED / CURRENT"
+                        : c.ok
+                          ? "STALE HEALTH"
+                          : "BLOCKED / UNAVAILABLE"}
                     </span>
                     <h2>{c.title}</h2>
                     <strong>{c.description}</strong>
                     <p>{c.detail}</p>
+                    <small>Source checked {fullTime(c.checkedAt)}</small>
                   </article>
                 ))}
               </section>

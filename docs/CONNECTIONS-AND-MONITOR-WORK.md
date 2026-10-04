@@ -69,3 +69,6 @@ Paper results do not establish live fill quality or profitability. Strategy work
 ## Remaining connection blocker
 
 Conventional FX is not connected to a broker. The practice-only data connector and secure installer are reviewable on Dublin, but require an eligible OANDA v20 demo account/token. Its FX order adapter is still future work. Hyperliquid mainnet remains public data; testnet's observed two FX-like products do not provide ten conventional FX pairs. Do not claim all market execution paths are complete.
+
+- Release `ff76c40` was pushed; public CI run 37214877640 passed both OCaml/routing checks and monitor tests/typecheck/build at 15:58:46 UTC. Frontend source/docs were synchronized to Dublin; the frontend itself remains localhost-only.
+- Final browser checks found one usability issue: changing history filters retained an unrelated selected order. This was corrected so deliberate filter changes reset selection, while periodic snapshot updates keep it fixed. Market ready counts now respect the selected timeframe; connection cards show their own timestamp and stale health.

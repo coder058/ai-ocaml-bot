@@ -76,7 +76,7 @@ export default function MarketRadar({
     selected && selection ? selected.frames[selection.frame] : undefined;
   const visibleFrames = frameFilter === "All frames" ? frames : [frameFilter];
   const ready = markets
-    .flatMap((market) => Object.values(market.frames))
+    .flatMap((market) => visibleFrames.map((frame) => market.frames[frame]))
     .filter(
       (frame) => frame.status === "ready" || frame.status === "candidate",
     ).length;
