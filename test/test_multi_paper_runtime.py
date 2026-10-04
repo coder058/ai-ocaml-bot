@@ -92,10 +92,11 @@ class RuntimeTests(unittest.TestCase):
                     "lastBarStart": bar.isoformat().replace("+00:00", "Z"),
                     "invalidationLevel": 90, "orderAuthority": False, "winProbability": None}}}]}))
 
-    def run_engine(self, root, armed=True):
+    def run_engine(self, root, armed=True, new_entries=True):
         environment = {**os.environ, "PATH": str(root)+":"+os.environ["PATH"],
             "TZ": "UTC", "PAPER_STATE_DIR": str(root), "SYNTHETIC_OMS_DIR": str(root),
             "PAPER_ORDERS": "1", "MULTI_PAPER_ORDERS": "1" if armed else "0",
+            "MULTI_PAPER_NEW_ENTRIES": "1" if new_entries else "0",
             "APCA_API_KEY_ID": "SYNTHETIC", "APCA_API_SECRET_KEY": "SYNTHETIC"}
         result = subprocess.run([str(ENGINE), "--execute"], env=environment,
                                 capture_output=True, text=True, timeout=30)
@@ -164,3 +165,24 @@ class RuntimeTests(unittest.TestCase):
             self.update_broker(root, open_orders=[{"symbol":"ETHUSD"}])
             self.run_engine(root)
             self.assertEqual(self.posts(root), [])
+
+    def test_paused_entries_preserve_owned_exit_management(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.setup_fixture(directory)
+            paused = self.run_engine(root, new_entries=False)
+            self.assertFalse(paused["newEntriesEnabled"])
+            self.assertEqual(self.posts(root), [])
+            self.run_engine(root)
+            self.assertEqual(len(self.posts(root)), 1)
+            self.update_broker(root, bid=89, ask=89.1)
+            self.run_engine(root, new_entries=False)
+            self.assertEqual([p["side"] for p in self.posts(root)], ["buy", "sell"])
+            self.assertEqual(self.run_engine(root, new_entries=False)["activeTickets"], [])
+
+    def test_paused_entries_still_reconcile_uncertain_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.setup_fixture(directory, uncertain_after_accept=True)
+            self.run_engine(root)
+            paused = self.run_engine(root, new_entries=False)
+            self.assertIsNone(paused["activeTickets"][0]["pending"])
+            self.assertEqual(len(self.posts(root)), 1)

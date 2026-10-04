@@ -70,6 +70,11 @@ let run ~execute () =
     | Ok signals -> signals | Error e -> failure "all" e; [] in
   let armed = execute && Sys.getenv_opt "MULTI_PAPER_ORDERS" = Some "1" &&
               Sys.getenv_opt "PAPER_ORDERS" = Some "1" in
+  (* SOURCE: the user's revised research focus is equities, indices and FX.
+     New crypto confluence entries require a separate explicit gate; exits and
+     pending reconciliation retain their existing paper authority. *)
+  let entries_enabled = armed && Sys.getenv_opt "MULTI_PAPER_NEW_ENTRIES" = Some "1" in
+  let entry_signals = if entries_enabled then signals else [] in
   let transmit (ticket : Multi_paper.ticket) (asset : Paper_crypto_broker.asset) =
     let pending = Option.get ticket.pending in
     (* SOURCE: the ledger and decision trace are durable BEFORE the network
@@ -102,7 +107,7 @@ let run ~execute () =
   (* SOURCE: broker positions/open orders and batched latest quotes are read
      once per serialized run. Fetch asset increments only for a possible order,
      avoiding broker metadata/position polling for every unchanged holding. *)
-  let symbols = List.sort_uniq String.compare (List.map (fun (s:Multi_paper.signal) -> s.symbol) signals @
+  let symbols = List.sort_uniq String.compare (List.map (fun (s:Multi_paper.signal) -> s.symbol) entry_signals @
     List.map (fun (t:Multi_paper.ticket) -> t.symbol) (Multi_paper.active_tickets !state)) in
   let positions = Paper_crypto_broker.positions () and orders = Paper_crypto_broker.open_orders () in
   let quotes = if symbols=[] then Ok (`Assoc ["quotes",`Assoc []])
@@ -125,7 +130,10 @@ let run ~execute () =
     | _ -> failure symbol "Asset preflight unavailable"; None in
   let with_quote reading (quote : Paper_crypto_broker.quote) =
     `Assoc (["triggerBid",`Float quote.bid; "triggerAsk",`Float quote.ask;
-      "triggerQuoteTime",`String quote.timestamp] @ (match reading with `Assoc fields -> fields | _ -> [])) in
+      "triggerQuoteTime",`String quote.timestamp;
+      "analysisAsOf",Option.value ~default:`Null (Paper_broker.member "asOf" document);
+      "analysisRetrievedAt",Option.value ~default:`Null (Paper_broker.member "retrievedAt" document)] @
+      (match reading with `Assoc fields -> fields | _ -> [])) in
   let origin_reading (ticket : Multi_paper.ticket) =
     match Paper_broker.member "markets" document with
     | Some (`List rows) ->
@@ -183,9 +191,10 @@ let run ~execute () =
           let next,ticket = Multi_paper.entry !state {signal with reading=with_quote signal.reading quote}
             ~now:(Unix.gettimeofday ()) ~qty ~price in
           state := next; persist next; transmit ticket asset)
-      | None -> ()) signals;
+      | None -> ()) entry_signals;
   let result = `Assoc ["asOf",`String (Multi_paper.stamp (Unix.gettimeofday ()));
     "mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
+    "newEntriesEnabled",`Bool entries_enabled;
     "policy",`String "trend_candle_confluence_v1"; "calibrated",`Bool false;
     "winProbability",`Null; "entryUsd",`Float Multi_paper.entry_usd;
     "maxOpenTickets",`Int Multi_paper.max_open_tickets;

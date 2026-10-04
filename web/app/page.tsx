@@ -210,7 +210,8 @@ export default function Home() {
         <div><span>LAST EXECUTION</span><strong className="last-time">{fullTime(lastExecution)}</strong></div>
       </section>
 
-      <details className="policy-note"><summary>Execution: <b>BTC quote rule</b> · multi-frame crypto experiment <b>{t.multiPaper?.mode === "PAPER_EXPERIMENT" ? "ARMED" : "OBSERVE"}</b></summary>
+      <details className="policy-note"><summary>Execution: <b>BTC quote rule</b> · multi-frame crypto experiment <b>{t.multiPaper?.mode !== "PAPER_EXPERIMENT" ? "OBSERVE" : t.multiPaper.newEntriesEnabled === false ? "EXITS ONLY" : "ARMED"}</b></summary>
+        {t.multiPaper?.newEntriesEnabled === false && <p>New crypto confluence entries are paused. Owned positions retain exit checks and pending-order reconciliation. Research now focuses on stocks, index proxies, FX-like contracts and energy. Their broker execution adapter is not connected yet.</p>}
         <p>BTC keeps its original quote-cross rule and $500 exposure ceiling. The new experiment uses rising EMA trend plus a bullish candle pattern on 1m, 5m, 30m, 1h or 4h,
           with one position per symbol, $100 entry target and ten experimental tickets maximum. That ticket limit is an uncalibrated operational choice.
           Alpaca crypto is long only. Hyperliquid perps and listed equity rows remain analysis only. Neither rule has demonstrated an after-fee edge; paper fills do not establish live profitability.</p>

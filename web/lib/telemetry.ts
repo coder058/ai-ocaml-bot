@@ -93,6 +93,7 @@ export type PaperTelemetry = {
   marketPipeline?: MarketPipeline;
   multiPaper?: {
     asOf: string; mode: "OBSERVE" | "PAPER_EXPERIMENT";
+    newEntriesEnabled?: boolean;
     policy: string; calibrated: false; winProbability: null;
     entryUsd: number; maxOpenTickets: number; eligibleLongSignals: number;
     activeTickets: { symbol: string; frame: FrameName; bar: string;

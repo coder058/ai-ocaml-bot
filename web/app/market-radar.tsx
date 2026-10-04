@@ -19,28 +19,31 @@ const label = (reading: FrameReading | undefined) => !reading ? "No data" :
 
 export default function MarketRadar({ pipeline, experiment }: { pipeline: MarketPipeline | undefined;
   experiment?: PaperTelemetry["multiPaper"] }) {
-  const [category, setCategory] = useState("All");
+  // SOURCE: revised user focus on equities, index proxies, FX and energy.
+  const [category, setCategory] = useState("Traditional markets");
   const [search, setSearch] = useState("");
   const [selection, setSelection] = useState<{ market: string; frame: FrameName } | null>(null);
   if (!pipeline) return <section className="market-radar"><h2>Markets &amp; timeframes</h2>
     <p>Waiting for the Dublin multi-market pipeline snapshot.</p></section>;
   const categories = [...new Set(pipeline.markets.map((market) => market.category))];
-  const markets = pipeline.markets.filter((market) => (category === "All" || market.category === category)
+  const markets = pipeline.markets.filter((market) => (category === "All" ||
+    (category === "Traditional markets" ? market.venue !== "Alpaca crypto" : market.category === category))
     && market.symbol.toLowerCase().includes(search.toLowerCase()));
   const selected = pipeline.markets.find((market) => `${market.venue}|${market.symbol}` === selection?.market);
   const reading = selected && selection ? selected.frames[selection.frame] : undefined;
-  const ready = pipeline.markets.flatMap((market) => Object.values(market.frames))
+  const ready = markets.flatMap((market) => Object.values(market.frames))
     .filter((frame) => frame.status === "ready" || frame.status === "candidate").length;
   return <section className="market-radar" aria-label="Market analysis pipeline">
     <div className="radar-heading"><div><span className="eyebrow">DATA → CLOSED CANDLES → OCAML ANALYSIS → RISK → PAPER ORDERS</span>
       <h2>Markets &amp; timeframes</h2></div>
-      <span>{pipeline.markets.length} markets · {ready} ready frames · {pipeline.currentCandidates} signals</span></div>
+      <span>{markets.length} visible markets · {ready} ready frames</span></div>
     <p className="radar-scope">BTC uses the legacy paper rule. {experiment?.mode === "PAPER_EXPERIMENT" ?
+      experiment.newEntriesEnabled === false ? "New crypto confluence entries are paused; owned positions keep their exit checks." :
       "Other Alpaca crypto can enter the multi-frame paper experiment when its gates pass." :
       "Other instruments currently have analysis only."} Equity and Hyperliquid rows have no broker order authority.
       Signals have no calibrated win probability. Click a frame to see its analysis and blocker.</p>
     <div className="radar-controls"><label>Market group <select value={category} onChange={(event) => setCategory(event.target.value)}>
-      <option>All</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <option>Traditional markets</option><option>All</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>Instrument <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="EUR, QQQ, ETH…" /></label>
       <small>Analysis as of {new Date(pipeline.asOf).toLocaleString("en-GB", { timeZone: "UTC" })} UTC</small></div>
     <div className="radar-table"><table><thead><tr><th>Instrument / venue</th>{frames.map((frame) => <th key={frame}>{frame}</th>)}
@@ -50,7 +53,8 @@ export default function MarketRadar({ pipeline, experiment }: { pipeline: Market
             onClick={() => setSelection({ market: `${market.venue}|${market.symbol}`, frame })}>
             {label(market.frames[frame])}</button></td>)}
         <td className="execution-scope">{pipeline.brokerOrderSymbols.includes(market.symbol) ? "Legacy paper" :
-          market.venue === "Alpaca crypto" && experiment?.mode === "PAPER_EXPERIMENT" ? "Paper experiment" : "Analysis only"}</td>
+          market.venue === "Alpaca crypto" && experiment?.mode === "PAPER_EXPERIMENT" ?
+            experiment.newEntriesEnabled === false ? "Exits only" : "Paper experiment" : "Analysis only"}</td>
       </tr>)}</tbody></table>{!markets.length && <p>No matching instrument.</p>}</div>
     {selected && reading && selection && <div className="frame-detail" aria-label="Selected frame analysis">
       <div><strong>{selected.symbol} · {selection.frame}</strong><button onClick={() => setSelection(null)} aria-label="Close frame analysis">×</button></div>
