@@ -21,13 +21,14 @@ from zoneinfo import ZoneInfo
 
 from hyperliquid_capture import COINS
 from stream_capture import credentials as stream_credentials
+from murphy_analysis import enrich, required_seed_bars, forward_reading
 
 # SOURCE: requested timeframes and official Alpaca / Hyperliquid interval names.
 FRAMES = {"1m": (1, "1Min"), "5m": (5, "5Min"), "30m": (30, "30Min"),
           "1h": (60, "1Hour"), "4h": (240, "4Hour")}
 # SOURCE: Pattern Forge EMA50 requires 50 closes; one additional candle retains
 # a preceding shape context. This is an initialization minimum, not calibration.
-SEED_BARS = 51
+SEED_BARS = max(51, required_seed_bars())
 # GUESS: # UNCALIBRATED GUESS — keep at most 1,000 bars per market/frame in the
 # operational cache. Measure RAM and disk as the universe grows.
 MAX_CACHE_BARS = 1_000
@@ -319,7 +320,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
             oldest = []
             for symbol in due:
                 prior = markets[f"{venue}|{symbol}"]["frames"].get(frame, [])
-                oldest.append(instant(prior[-1]["t"]) if prior else seed_start)
+                oldest.append(instant(prior[-1]["t"]) if len(prior) >= SEED_BARS else seed_start)
             start = min(oldest)
             fetched: dict[str, list[dict]] = {}
             boundaries = {symbol: as_of for symbol in due}
@@ -362,6 +363,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     if proc.returncode:
         raise RuntimeError("shared OCaml analysis failed")
     result = json.loads(proc.stdout)
+    enrich(result, requested, {name: minutes for name, (minutes, _) in FRAMES.items()})
     for row, original in zip(result["markets"], requested, strict=True):
         row["category"] = original["category"]
         row["fetches"] = original["fetches"]
@@ -383,7 +385,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
             if bar_start and emitted.get(key, "") < bar_start:
                 decisions.append({"observedAt": result["retrievedAt"], "asOf": result["asOf"],
                     "venue": market["venue"], "symbol": market["symbol"], "frame": frame,
-                    "policy": result["policy"], "reading": reading, "orderAuthority": False})
+                    "policy": result["policy"], "reading": forward_reading(reading), "orderAuthority": False})
                 emitted[key] = bar_start
     if decisions:
         # SOURCE: append-only operational forward evidence, not broker executions.

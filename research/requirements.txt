@@ -1,2 +1,6 @@
 # SOURCE: websockets 15.0.1 on PyPI; isolated read-only capture runtime.
 websockets==15.0.1
+# SOURCE: verified PyPI TA-Lib 0.8.1 wheel includes the C pattern/indicator engine.
+TA-Lib==0.8.1
+# SOURCE: verified compatible NumPy 2.2.6 wheel on Dublin's Python 3.10.
+numpy==2.2.6

@@ -56,3 +56,9 @@ The current monitor displays only bot-owned open broker positions, current expos
 The original complete `.local/telemetry.json`, performance journal and Dublin broker/OMS journals remain intact for reconciliation and auditing. The display reset does not reset the broker account, change strategies, submit/cancel orders or close positions. Each refreshed full snapshot is projected to the same positions-only response; a restart or synchronization cannot restore the history view.
 
 Verified: 25 web tests, TypeScript check and production build passed. Local HTTP response retained BTC/USD and SOL/USD inventory, omitted historical arrays and performance, and the export endpoint returned 410. Browser verification confirmed only the current positions view.
+
+## Market chart workspace
+
+The positions-only broker reset is preserved. A separate market-data workspace now contains 91 instruments x five frames (455 slots), with actual available closed candles, EMA20/50 and pattern markers. Five short IEX frames had no candles at verification and are visibly empty. Search, venue and timeframe filters narrow the wall; click a card for interactive pan/zoom, candle readout, volume and Murphy/candlestick/indicator evidence. Pattern dots and Fibonacci overlays can be toggled. The full installed TA-Lib catalog is enumerated, not a claim to recognize every pattern ever named.
+
+The minute-scheduled analysis runs on Dublin, with TA-Lib C through Python extending the existing OCaml formulas. The ten Murphy law panels are descriptive and explicitly partial; the complete book and a validated predictive strategy remain unfinished. See [coverage and active work](MURPHY-CHARTS-WORK.md). Market data is read-only and separate from broker execution. TradingView Lightweight Charts 5.2.1 provides the expanded chart and retains its attribution logo.

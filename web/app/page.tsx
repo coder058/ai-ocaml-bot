@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { PositionsView } from "@/lib/positions-view";
 import { marketSymbol } from "@/lib/bot-view";
+import ChartWall from "./chart-wall";
 
 type Live = { telemetry: PositionsView | null };
 // SOURCE: USD amounts use the currency's two standard display decimals.
@@ -46,7 +47,7 @@ export default function Home() {
   return <main className="positions-reset">
     <header className="topbar">
       <div className="brand"><span className="brand-mark">AI</span><div><strong>AI OCaml Bot</strong><small>Alpaca paper trading</small></div></div>
-      <span className="reset-badge">Open positions only</span>
+      <span className="reset-badge">Positions + market charts</span>
     </header>
     <div className="monitor-meta">
       <div><h1>Open positions</h1><p>History cleared from this monitor.</p></div>
@@ -74,5 +75,6 @@ export default function Home() {
       </article>)}</div>
       {!positions.length && <p className="empty">No bot-owned open positions.</p>}
     </section>}
+    <ChartWall />
   </main>;
 }
