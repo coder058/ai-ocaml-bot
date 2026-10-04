@@ -67,7 +67,7 @@ class DecisionHistoryTests(unittest.TestCase):
     def test_multiframe_reason_joins_exact_client_order_id(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            path.write_text(json.dumps({"kind": "DECISION", "clientOrderId": "jsbotmtfone",
+            path.write_text(json.dumps({"kind": "DECISION", "clientOrderId": "jsbotmtfone", "at": "2026-10-04T19:49:59Z",
                 "policy": "trend_candle_confluence_v1", "frame": "4h", "signalBar": "synthetic",
                 "reason": "Synthetic reason", "reading": {"ema20": 100, "ema50": 99,
                     "candleShapes": ["hammer_shape"], "triggerBid": 101}}) + "\n")
@@ -77,6 +77,7 @@ class DecisionHistoryTests(unittest.TestCase):
             self.assertEqual(set(evidence), {"one"})
             self.assertEqual(evidence["one"]["frame"], "4h")
             self.assertEqual(evidence["one"]["trigger_bid"], "101")
+            self.assertEqual(evidence["one"]["observedAt"], "2026-10-04T19:49:59Z")
 
     def test_nonbtc_received_asset_fee_keeps_its_own_unit(self):
         rows = [{"id": "ethfee", "description": "Coin Pair Transaction Fee (Non USD)",
@@ -126,6 +127,7 @@ class DecisionHistoryTests(unittest.TestCase):
         history = decision_history(events, orders)
         self.assertEqual(set(history), {"one"})
         self.assertEqual(history["one"]["policy"], "quote_cross_30s_v1")
+        self.assertEqual(history["one"]["observedAt"], "2026-09-27T00:00:00Z")
         self.assertEqual(history["one"]["reference_quote_time"],
                          "2026-09-26T23:59:30Z")
         self.assertEqual(history["one"]["receive_to_decision_ms"], "5.3")

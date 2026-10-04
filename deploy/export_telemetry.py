@@ -404,6 +404,10 @@ def decision_history(events: list[dict[str, str]],
                 "quote_time", "policy", "receive_to_decision_ms", "trend", "reference_bid",
                 "reference_ask", "current_bid", "current_ask", "cross_direction",
                 "trigger_move_bps") if key in fields}
+            # SOURCE: retain the actual journal timestamp, not the market's
+            # quote timestamp, to verify that the trace preceded submission.
+            if row.get("at"):
+                decisions[suffix]["observedAt"] = row["at"]
         else:
             samples[suffix] = {key: fields[key] for key in (
                 "reference_quote_time", "window_ms", "candidate") if key in fields}
@@ -515,7 +519,7 @@ def multi_order_evidence(orders: list[dict],
         if row.get("kind") != "DECISION" or client_id not in by_client:
             continue
         reading = row.get("reading", {})
-        values = {"policy": row.get("policy"), "reason": row.get("reason"),
+        values = {"policy": row.get("policy"), "reason": row.get("reason"), "observedAt": row.get("at"),
             "frame": row.get("frame"), "signal_bar": row.get("signalBar"),
             "invalidation_level": reading.get("invalidationLevel"),
             "ema20": reading.get("ema20"), "ema50": reading.get("ema50"),

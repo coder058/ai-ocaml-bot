@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { PositionsView } from "@/lib/positions-view";
 import { marketSymbol } from "@/lib/bot-view";
 import ChartWall from "./chart-wall";
+import ExecutionDesk from "./execution-desk";
 
 type Live = { telemetry: PositionsView | null };
 // SOURCE: USD amounts use the currency's two standard display decimals.
@@ -47,10 +48,10 @@ export default function Home() {
   return <main className="positions-reset">
     <header className="topbar">
       <div className="brand"><span className="brand-mark">AI</span><div><strong>AI OCaml Bot</strong><small>Alpaca paper trading</small></div></div>
-      <span className="reset-badge">Positions + market charts</span>
+      <a className="reset-badge" href="#execution">Analysis → paper execution</a>
     </header>
     <div className="monitor-meta">
-      <div><h1>Open positions</h1><p>History cleared from this monitor.</p></div>
+      <div><h1>Open positions</h1><p>Current inventory. Earlier trade history remains cleared.</p></div>
       <div className="snapshot-time"><span>Broker snapshot</span><strong>{t ? stamp(t.generatedAt) : "Waiting for data"}</strong><small>{t ? t.service.active ? "Paper service active" : "Paper service stopped" : "Connecting"}</small></div>
     </div>
     {error && <div className="alert" role="status">{error}</div>}
@@ -75,6 +76,7 @@ export default function Home() {
       </article>)}</div>
       {!positions.length && <p className="empty">No bot-owned open positions.</p>}
     </section>}
+    <ExecutionDesk />
     <ChartWall />
   </main>;
 }
