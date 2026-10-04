@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const query = new URL(request.url).searchParams;
   const symbol = query.get("symbol"), venue = query.get("venue");
+  // SOURCE: HTTP semantics: 400 for incomplete selectors, 404 for an absent instrument.
   if ((symbol != null || venue != null) && (!symbol || !venue))
     return Response.json({ error: "Both symbol and venue are required for chart detail" }, { status: 400 });
   const t = await getTelemetry();
