@@ -1579,6 +1579,14 @@ footer {
 .candle-readout { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; font: 12px var(--mono); color: var(--soft); }
 .candle-readout > span:last-child { flex-basis: 100%; color: var(--amber); }
 
+/* GUESS: # UNCALIBRATED GUESS — presentation spacing, not policy parameters. */
+.primary-context p { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.murphy-laws > article:first-child { grid-column: 1 / -1; }
+.primary-context-frames { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.primary-context-frames article { padding: 12px; background: var(--bg); }
+.primary-context-frames dd { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .primary-context-frames { grid-template-columns: 1fr; } }
+
 /* GUESS: # UNCALIBRATED GUESS — presentation dimensions/colors only. */
 .execution-workspace { margin-top: 36px; border-top: 1px solid var(--line); padding-top: 28px; }
 .execution-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }

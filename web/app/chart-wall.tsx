@@ -141,6 +141,28 @@ function LargeChart({ suite, title }: { suite: TechnicalSuite | undefined; title
   </>;
 }
 
+function PrimaryContextEvidence({ value }: { value: unknown }) {
+  const context = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const frames = context.frames && typeof context.frames === "object" ? context.frames as Record<string, Record<string, unknown>> : {};
+  return <div className="primary-context">
+    <p><strong>Native daily / weekly context</strong><br />{evidenceText(context.source)} · received {evidenceText(context.retrievedAt)}</p>
+    <div className="primary-context-frames">{["1Day", "1Week"].map(frame => {
+      const reading = frames[frame] ?? {};
+      return <article key={frame}><header><strong>{frame === "1Day" ? "Daily" : "Weekly"}</strong><span>{evidenceText(reading.status)}</span></header>
+        <dl><div><dt>Trend</dt><dd>{evidenceText(reading.trend)}</dd></div>
+          <div><dt>Closed / consecutive bars</dt><dd>{evidenceText(reading.closedBars)} / {evidenceText(reading.contiguousBars)}</dd></div>
+          <div><dt>EMA20 / EMA50</dt><dd>{evidenceText(reading.ema20)} / {evidenceText(reading.ema50)}</dd></div>
+          <div><dt>Last actual bar</dt><dd>{evidenceText(reading.lastBarAt)}</dd></div>
+          <div><dt>Bar closed at</dt><dd>{evidenceText(reading.lastBarClosedAt)}</dd></div>
+          <div><dt>Expected latest closed bar</dt><dd>{evidenceText(reading.expectedLatestBarAt)}</dd></div></dl>
+      </article>;
+    })}</div>
+    <p className="analysis-limit">Historical data as retrieved, not a point-in-time backtest. Weekly closure waits for the next native Monday midnight; Sunday can still show the prior week. No trade authority or win probability.</p>
+    <p>{evidenceText(context.missing)}</p>
+    {Array.isArray(context.errors) && context.errors.length > 0 && <p>Retrieval errors: {evidenceText(context.errors)}</p>}
+  </div>;
+}
+
 function Evidence({ suite, pipeline }: { suite: TechnicalSuite | undefined; pipeline: ChartPipeline }) {
   const [tab, setTab] = useState("Murphy");
   const [allPatterns, setAllPatterns] = useState(false);
@@ -150,8 +172,9 @@ function Evidence({ suite, pipeline }: { suite: TechnicalSuite | undefined; pipe
     <nav aria-label="Analysis details">{["Murphy", "Candlesticks", "Indicators"].map(name => <button key={name} aria-pressed={tab === name} onClick={() => setTab(name)}>{name}</button>)}</nav>
     {tab === "Murphy" && <div className="murphy-laws">{suite.murphy?.map(law => <article key={law.law}>
       <header><strong>{law.law}. {law.name}</strong><span>{law.status}</span></header>
-      <dl>{Object.entries(law.evidence).map(([key, value]) => <div key={key}><dt>{key === key.toUpperCase() ? key.replaceAll("_", " ") : key.replace(/([a-z])([A-Z])/g, "$1 $2")}</dt><dd>{evidenceText(value)}</dd></div>)}</dl>
-    </article>)}<p className="analysis-limit">Descriptive checklist. Swing divergences are exploratory warnings, not trade probabilities. Weekly/monthly context and consolidated volume/open interest remain incomplete.</p></div>}
+      {law.law === 1 && <PrimaryContextEvidence value={law.evidence.primaryContext} />}
+      <dl>{Object.entries(law.evidence).filter(([key]) => key !== "primaryContext").map(([key, value]) => <div key={key}><dt>{key === key.toUpperCase() ? key.replaceAll("_", " ") : key.replace(/([a-z])([A-Z])/g, "$1 $2")}</dt><dd>{evidenceText(value)}</dd></div>)}</dl>
+    </article>)}<p className="analysis-limit">Descriptive checklist. Swing divergences are exploratory warnings, not trade probabilities. Monthly context, other venues' primary context and consolidated volume/open interest remain incomplete.</p></div>}
     {tab === "Candlesticks" && <><label className="pattern-toggle"><input type="checkbox" checked={allPatterns} onChange={e => setAllPatterns(e.target.checked)} /> Show every catalog pattern</label>
       <p>TA-Lib signed pattern codes are detections, not confidence or win probabilities.</p>
       <div className="pattern-list">{catalog?.patternCatalog.filter(p => allPatterns || !!suite.patterns[p.code]?.value).map(p => {

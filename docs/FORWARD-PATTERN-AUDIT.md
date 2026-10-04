@@ -40,3 +40,13 @@ The labels use actual later candles but assume their opening price as a referenc
 Adjacent horizons, cross-market returns and related patterns are dependent. Many comparisons create a selection bias; there is no multiplicity correction or statistical significance claim. Sparse/session gaps reject labels. The initial validation sample may be empty and will remain small during this short work window.
 
 No observed paper result establishes live profitability. Even positive gross price labels can lose money after costs.
+
+## Unchanged frozen attempt, subsequent observation
+
+At approximately 21:04 UTC on 2026-10-04, the same horizon and split produced
+3,504 gross labels: 3,492 discovery and only 12 validation. There were 1,358
+exploratory comparisons; 72 labels crossing the split were excluded. Frozen
+input prefix: 300,693,840 bytes; SHA-256
+`c031f3ce25e0f6f1d39c02808eae1316500acea71535e4b14d713e5dc8a96cbc`.
+This small validation sample has no execution/cost model and did not authorize
+a new policy. Do not choose a winning pattern from these many comparisons.

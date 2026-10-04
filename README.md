@@ -135,6 +135,10 @@ and acceptance gates; it does not claim unbuilt steps are implemented.
 
 ## Trading desk
 
+[Native daily/weekly context](docs/PRIMARY-TREND-CONTEXT.md) augments the five
+intraday Murphy panels for monitored Alpaca instruments. Other venues and
+monthly history remain incomplete; this descriptive context cannot authorize orders.
+
 The current desk shows **Open positions**, **Analysis & execution**, **New paper
 orders** and **Market charts**. Earlier closed-trade history, the old curve and
 CSV export remain hidden after the reset. The new order cohort starts at

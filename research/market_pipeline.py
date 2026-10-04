@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 from hyperliquid_capture import COINS
 from stream_capture import credentials as stream_credentials
 from murphy_analysis import enrich, required_seed_bars, forward_reading
+from primary_trend_context import collect as collect_primary_context
 
 # SOURCE: requested timeframes and official Alpaca / Hyperliquid interval names.
 FRAMES = {"1m": (1, "1Min"), "5m": (5, "5Min"), "30m": (30, "30Min"),
@@ -350,6 +351,14 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
         # Persist completed frames during slow initial seed, so a failed/restarted
         # seed can resume. Missing symbols/frames still report no data explicitly.
         atomic(cache_path, cache)
+    try:
+        cache["primaryContext"] = collect_primary_context(request, paper_get, STOCK_BARS, CRYPTO_BARS,
+            universes, credentials, datetime.now(timezone.utc), cache.get("primaryContext"))
+    except (ValueError, KeyError, TypeError) as error:
+        # A failed primary-context refresh must not stop the existing intraday
+        # data/OMS path or silently present an old context as newly retrieved.
+        errors.append({"stage": "primary_context", "error": type(error).__name__})
+    primary_context = cache.get("primaryContext", {})
     final_as_of = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     requested = [{**markets[f"{venue}|{symbol}"],
                   "frames": {name: markets[f"{venue}|{symbol}"]["frames"].get(name, [])
@@ -357,6 +366,12 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
                   **({"expectedStarts": equity_slots, "sessionOpen": clock.get("is_open") is True}
                      if venue == "Alpaca equities" else {})}
                  for venue, symbols in universes.items() for symbol in symbols]
+    for market in requested:
+        key = market["venue"] + "|" + market["symbol"]
+        market["primaryContext"] = {**primary_context.get("markets", {}).get(key, {}),
+            "asOf": primary_context.get("asOf"), "retrievedAt": primary_context.get("retrievedAt"),
+            "missing": primary_context.get("missing", "Native primary context unavailable"),
+            "errors": primary_context.get("errors", []), "orderAuthority": False, "winProbability": None}
     payload = {"asOf": utc(final_as_of), "markets": requested}
     proc = subprocess.run([str(engine)], input=json.dumps(payload).encode(),
                           capture_output=True, timeout=TIMEOUT_SECONDS, check=False)

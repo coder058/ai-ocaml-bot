@@ -33,6 +33,7 @@ jobs:
           python -m unittest discover -s test -p test_murphy_analysis.py -v
           python -m unittest discover -s test -p test_forward_pattern_audit.py -v
           python -m unittest discover -s test -p test_market_pipeline.py -v
+          python -m unittest discover -s test -p test_primary_trend_context.py -v
   monitor:
     runs-on: ubuntu-latest
     defaults:

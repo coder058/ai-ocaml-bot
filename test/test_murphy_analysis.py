@@ -123,6 +123,13 @@ class MurphyTests(unittest.TestCase):
         self.assertEqual(suite["murphy"][-1]["status"], "partial")
         self.assertFalse(result["technicalCoverage"]["completeMurphyBook"])
         self.assertFalse(result["technicalCoverage"]["orderAuthority"])
+        # SOURCE: synthetic native context must be retained as descriptive
+        # evidence, never turned into order authority by the enrichment path.
+        context = {"source": "synthetic", "retrievedAt": as_of, "frames": {"1Week": {"status": "warming"}}, "orderAuthority": False, "winProbability": None}
+        enrich(result, [{"frames": {"1m": rows}, "primaryContext": context}], {"1m": 1})
+        current = result["markets"][0]["frames"]["1m"]
+        self.assertEqual(current["technicalSuite"]["murphy"][0]["evidence"]["primaryContext"], context)
+        self.assertEqual(forward_reading(current)["technicalEvidence"]["primaryContext"], context)
         short_result = {"asOf": as_of, "markets": [{"venue": "fixture", "frames": {"1m": {"trend": "warming"}}}]}
         enrich(short_result, [{"frames": {"1m": rows[-2:]}}], {"1m": 1})
         short_laws = short_result["markets"][0]["frames"]["1m"]["technicalSuite"]["murphy"]

@@ -296,7 +296,9 @@ def enrich(result, requested, frame_minutes):
                        for key, r in market["frames"].items()}
             available = "descriptive" if suite.get("status") == "ready" else "unavailable"
             suite["murphy"] = [
-                law(1, "partial", {"frames": aligned, "missing": "Monthly/weekly primary trend history"}),
+                law(1, "partial", {"frames": aligned,
+                    "primaryContext": original.get("primaryContext", {"missing": "Native daily/weekly/monthly history unavailable"}),
+                    "missing": "Monthly history; native daily/weekly context can also be unavailable or warming"}),
                 law(2, "warming" if reading.get("trend") == "warming" else available, {"trend": reading.get("trend"), "structure": reading.get("structure")}),
                 law(3, available if geometry_values.get("support") is not None or geometry_values.get("resistance") is not None else "waiting_swings",
                     {"support": geometry_values.get("support"), "resistance": geometry_values.get("resistance")}),
@@ -321,7 +323,7 @@ def enrich(result, requested, frame_minutes):
         "murphyLaws": list(LAW_NAMES), "source": f"TA-Lib {talib.__version__} C via Python + shared OCaml",
         "displayBars": DISPLAY_BARS, "seedBars": required_seed_bars(), "orderAuthority": False,
         "completeMurphyBook": False,
-        "remaining": ["Weekly/monthly primary trends", "Strategy validation and independent momentum-pivot divergences",
+        "remaining": ["Monthly primary trends and native primary context outside Alpaca", "Strategy validation and independent momentum-pivot divergences",
             "Full reversal/continuation formation library", "Elliott wave, time-cycle interpretation",
             "Point-and-figure analysis", "Market breadth / intermarket confirmation",
             "Consolidated volume and open interest", "Strategy validation and probabilities"],
@@ -344,6 +346,7 @@ def forward_reading(reading):
         "geometry": {key: geometry_values.get(key) for key in
                      ("support", "resistance", "retracements", "trendlines", "chartShapes")},
         "divergences": suite.get("divergences", []),
+        "primaryContext": next((law.get("evidence", {}).get("primaryContext") for law in suite.get("murphy", []) if law.get("law") == 1), None),
         "orderAuthority": False, "winProbability": None,
     }
     return compact
