@@ -431,8 +431,13 @@ def service_state(credentials: dict[str, str]) -> dict[str, object]:
     mode = "PAPER_ORDER" if active and credentials.get("PAPER_ORDERS") == "1" else (
         "MONITOR" if active else "STOPPED"
     )
+    # SOURCE: installations can retain their existing private systemd unit name.
+    # Configuration selects that unit without publishing its name in telemetry.
+    capture_unit = credentials.get("AI_OCAML_CAPTURE_SERVICE", "ai-ocaml-market-capture.service")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]*\.service", capture_unit):
+        raise ValueError("Invalid capture service configuration")
     capture_active = subprocess.run(
-        ["systemctl", "is-active", "--quiet", "ai-ocaml-market-capture.service"],
+        ["systemctl", "is-active", "--quiet", capture_unit],
         check=False,
     ).returncode == 0
     return {"active": active, "mode": mode, "captureActive": capture_active}

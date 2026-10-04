@@ -77,3 +77,11 @@ Sources: [Alpaca crypto order support](https://docs.alpaca.markets/us/docs/crypt
 [free market-data limits](https://docs.alpaca.markets/us/v1.1/docs/about-market-data-api),
 [paper order updates](https://docs.alpaca.markets/us/docs/websocket-streaming),
 [OANDA practice API](https://developer.oanda.com/rest-live-v20/development-guide/).
+
+## Installation name mapping
+
+The read-only exporter defaults to `ai-ocaml-market-capture.service`. An existing
+installation can set `AI_OCAML_CAPTURE_SERVICE` in its private broker environment
+file to its actual collector unit. This selects the health check only; it does
+not rename, restart or duplicate a data collector, and the private unit name is
+not exported to the public monitor. Invalid unit syntax stops the projection.

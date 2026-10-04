@@ -21,10 +21,23 @@ from export_telemetry import (  # noqa: E402
     public_journal,
     public_positions,
     multi_order_evidence,
+    service_state,
 )
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_capture_health_uses_configured_unit_without_publishing_private_name(self):
+        # SOURCE: synthetic service outcomes verify deployment-name mapping only.
+        import subprocess
+        with patch("export_telemetry.subprocess.run",return_value=subprocess.CompletedProcess([],0)) as run:
+            result=service_state({"PAPER_ORDERS":"1","AI_OCAML_CAPTURE_SERVICE":"configured-capture.service"})
+        self.assertTrue(result["captureActive"])
+        self.assertEqual(run.call_args_list[1].args[0][-1],"configured-capture.service")
+        self.assertNotIn("configured-capture.service",json.dumps(result))
+        with self.assertRaises(ValueError):
+            with patch("export_telemetry.subprocess.run",return_value=subprocess.CompletedProcess([],0)):
+                service_state({"AI_OCAML_CAPTURE_SERVICE":"--invalid.service"})
+
     def test_stock_scope_requires_owned_namespace_and_keeps_aapl_private(self):
         rows=[{"id":"owned","client_order_id":"aibotstkExample","symbol":"QQQ","asset_class":"us_equity"},
               {"id":"private","client_order_id":"aibotstkProtected","symbol":"AAPL","asset_class":"us_equity"},

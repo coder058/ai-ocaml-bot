@@ -72,3 +72,17 @@ Conventional FX is not connected to a broker. The practice-only data connector a
 
 - Release `ff76c40` was pushed; public CI run 37214877640 passed both OCaml/routing checks and monitor tests/typecheck/build at 15:58:46 UTC. Frontend source/docs were synchronized to Dublin; the frontend itself remains localhost-only.
 - Final browser checks found one usability issue: changing history filters retained an unrelated selected order. This was corrected so deliberate filter changes reset selection, while periodic snapshot updates keep it fixed. Market ready counts now respect the selected timeframe; connection cards show their own timestamp and stale health.
+
+## Completed monitor hour and release verification
+
+- UTC clock confirmed the one-hour monitor window at 16:12:14, after the first connection hour (14:12:09–15:12:14). Work included accounting/FIFO implementation, actual snapshot storage, desk views, filtered HTTP exports, desktop/narrow QA and release verification; elapsed time alone is not the evidence.
+- Final frontend release `e76b07e` passed public CI run 37215319748 at 16:05:03 UTC. Local and Dublin frontend source hashes match after normalizing Windows line endings. Listener is loopback only, 127.0.0.1:3000; no web server was exposed on Dublin.
+- The browser actually downloaded `ai-ocaml-orders.csv`: 1,513 filtered BTC execution orders, each with a reason column, no AAPL, snapshot 16:03:51 UTC. Changing the filter to SOL selects SOL's actual order; a selected older BTC order stayed unchanged across the next broker snapshot at 16:05:24 UTC.
+- Mobile 390px layout used position/history cards, with document scroll width equal to client width (375px excluding the scrollbar). QQQ/4h detail showed the actual closed-session blocker, candle start 2 October 16:00 UTC and 54 contiguous bars; no new stock execution was invented.
+- The final connection audit found a rebrand/configuration defect: exporter checked a public default unit name while the existing collector retained its private installation name. The collector itself was active with zero restarts and current captures. Added an explicit private `AI_OCAML_CAPTURE_SERVICE` setting and validated unit syntax; public telemetry exposes only the resulting active boolean. Authenticated exporter check then reported captureActive true, without restarting or duplicating the collector.
+
+## Next actual steps
+
+1. Supply an eligible OANDA v20 practice account/token through the secure VPS installer (no secret in chat). Verify the real FX catalog/pricing/candles and complete the FX order/ownership/reconciliation adapter before claiming FX execution.
+2. During the next regular stock session, verify real stock quote/bar events and the explicit paper route with broker outcomes. Connected Sunday transport and synthetic execution tests do not prove a stock fill.
+3. Strategy development follows this task: chronological point-in-time evaluation, explicit recorded candidate policies, calibrated risk/probability decisions only when supported. The current BTC rule remains uncalibrated and new ETH/SOL confluence entries remain paused.
