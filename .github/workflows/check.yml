@@ -30,6 +30,7 @@ jobs:
           python -m unittest discover -s test -p test_export_telemetry.py -v
           python -m unittest discover -s test -p test_sync_local_monitor.py -v
           python -m unittest discover -s test -p test_murphy_analysis.py -v
+          python -m unittest discover -s test -p test_forward_pattern_audit.py -v
           python -m unittest discover -s test -p test_market_pipeline.py -v
   monitor:
     runs-on: ubuntu-latest
