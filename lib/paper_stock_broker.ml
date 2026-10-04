@@ -6,6 +6,8 @@ let string = Paper_broker.string
 let symbol value =
   (* SOURCE: listed ticker syntax, and the user's protected AAPL inventory. *)
   if value="AAPL" then Error "AAPL is protected"
+  else if Result.is_ok (Paper_crypto_broker.canonical value) then
+    Error "crypto identifiers cannot use the stock router"
   else if value="" || not (String.for_all (function
     | 'A'..'Z' | '0'..'9' | '.' | '-' -> true | _ -> false) value) then
     Error "invalid stock ticker"

@@ -2,6 +2,7 @@ open Paper_market
 let ok = function Ok value -> value | Error text -> failwith text
 let check text passed = if not passed then failwith text
 let () =
+  assert (Result.is_error (Paper_stock_broker.symbol "BTCUSD"));
   (* SOURCE: synthetic payload fixtures validate routing, not broker fills. *)
   let asset=Paper_stock_broker.{symbol="QQQ";fractionable=true} in
   let id="aibotstkfixture" in

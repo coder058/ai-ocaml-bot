@@ -48,6 +48,8 @@ Work inline. Spend at least one hour on connections/paper execution and then at 
 - OANDA practice-only data connector, account-specific FX catalog and closed-candle transport prepared. Four synthetic tests passed. Actual state: `practice_credentials_missing`. It has no FX execution adapter. Interactive secure installer is available on Dublin; a practice account/token is still required from the user.
 - Full OCaml build/unit checks passed; six candle pipeline checks, two crypto stream checks, two IEX subscription checks, two paper order projection checks, fifteen exporter checks and six local transport checks passed in the stated environments.
 - Connection telemetry is now carried to the localhost snapshot. Vercel uploads remain disabled. Monitor phase has not started yet.
+- Connection commit `4360ee9` was pushed to the public AI OCaml Bot repo; GitHub CI completed successfully at 15:09:26 UTC, including OCaml build/unit checks, synthetic routing/connection tests and existing web tests/typecheck/build.
+- At 15:07 UTC all 69 monitored stocks were confirmed fractionable. A subsequent scanner run took 25.6714 seconds and reported no provider errors, but some short frames were warming, stale or missing. The monitor must expose these states instead of implying all 455 frames are ready.
 
 ## Remaining risk
 
