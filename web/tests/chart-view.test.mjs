@@ -17,4 +17,32 @@ test("chart projection preserves actual candles and detections, excluding broker
   assert.equal(frame.winProbability, null);
   assert.equal(JSON.stringify(result).includes("private"), false);
   assert.equal(chartView(undefined), null);
+  assert.equal(frame.technicalSuite.detailLevel, "full");
+});
+
+test("wall previews keep actual bars and overlays while chart details retain the complete analysis", () => {
+  // SOURCE: synthetic projection fixture, not market data or performance.
+  const events = [{ time: "2026-10-04T16:00:00Z", code: "CDLHAMMER", name: "Hammer", value: 100 },
+    { time: "2026-10-04T16:00:00Z", code: "CDLDOJI", name: "Doji", value: 100 }];
+  const suite = { status: "ready", bars: [{ t: events[0].time, o: 1, h: 2, l: 1, c: 2, v: 1 }],
+    patterns: { CDLHAMMER: { status: "ready", value: 100 }, CDLENGULFING: { status: "ready", value: 0 } },
+    patternEvents: events, indicators: { RSI: { status: "ready", values: { real: 50 } } },
+    murphy: [{ law: 1, evidence: { missing: "Primary history" } }], overlays: { EMA20: [null] } };
+  const raw = { markets: ["A", "B"].map(symbol => ({ symbol, venue: "fixture", frames: { "1m": { technicalSuite: suite } } })) };
+  const wall = chartView(raw, { preview: true });
+  assert.equal(wall.markets.length, 2);
+  const preview = wall.markets[0].frames["1m"].technicalSuite;
+  assert.equal(preview.detailLevel, "preview");
+  assert.deepEqual(preview.bars, suite.bars);
+  assert.deepEqual(preview.overlays, suite.overlays);
+  assert.equal(preview.patternEvents.length, 1);
+  assert.deepEqual(preview.indicators, {});
+  assert.equal(preview.murphy, undefined);
+  assert.equal(preview.patterns.CDLHAMMER.value, 100);
+  const expanded = chartView(raw, { venue: "fixture", symbol: "B" });
+  assert.deepEqual(expanded.markets.map(m => m.symbol), ["B"]);
+  assert.deepEqual(expanded.markets[0].frames["1m"].technicalSuite.patternEvents, events);
+  assert.deepEqual(JSON.parse(JSON.stringify(expanded.markets[0].frames["1m"].technicalSuite.indicators)), suite.indicators);
+  assert.equal(chartView(raw, { venue: "fixture", symbol: "unknown" }).markets.length, 0);
+  assert.equal(suite.patternEvents.length, 2);
 });

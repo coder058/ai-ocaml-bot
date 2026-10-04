@@ -144,7 +144,7 @@ function LargeChart({ suite, title }: { suite: TechnicalSuite | undefined; title
 function Evidence({ suite, pipeline }: { suite: TechnicalSuite | undefined; pipeline: ChartPipeline }) {
   const [tab, setTab] = useState("Murphy");
   const [allPatterns, setAllPatterns] = useState(false);
-  if (!suite) return <p className="empty">Waiting for expanded technical analysis from Dublin.</p>;
+  if (!suite || suite.detailLevel !== "full") return <p className="loading">Loading full Murphy, candlestick and indicator evidence for this instrument…</p>;
   const catalog = pipeline.technicalCoverage;
   return <div className="chart-evidence">
     <nav aria-label="Analysis details">{["Murphy", "Candlesticks", "Indicators"].map(name => <button key={name} aria-pressed={tab === name} onClick={() => setTab(name)}>{name}</button>)}</nav>
@@ -175,6 +175,31 @@ export default function ChartWall() {
   const [venue, setVenue] = useState("All venues");
   const [frame, setFrame] = useState<FrameName | "All frames">("All frames");
   const [selected, setSelected] = useState<{ market: string; frame: FrameName } | null>(null);
+  const [detail, setDetail] = useState<{ market: string; pipeline: ChartPipeline } | null>(null);
+  const [detailError, setDetailError] = useState("");
+  const chosenPreview = pipeline?.markets.find(m => `${m.venue}|${m.symbol}` === selected?.market);
+  const selectedVenue = chosenPreview?.venue, selectedSymbol = chosenPreview?.symbol;
+  useEffect(() => {
+    if (!selectedVenue || !selectedSymbol) return;
+    const controller = new AbortController();
+    const marketKey = `${selectedVenue}|${selectedSymbol}`;
+    setDetailError("");
+    async function loadDetail() {
+      try {
+        const query = new URLSearchParams({ venue: selectedVenue!, symbol: selectedSymbol! });
+        const response = await fetch(`/api/markets?${query}`, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error("Detail unavailable");
+        const data = await response.json();
+        const m = data.pipeline?.markets?.[0];
+        if (!m || `${m.venue}|${m.symbol}` !== marketKey) throw new Error("Detail does not match instrument");
+        if (!controller.signal.aborted) setDetail({ market: marketKey, pipeline: data.pipeline });
+      } catch {
+        if (!controller.signal.aborted) setDetailError("Full analysis refresh failed. Reopen this chart to retry; preview candles remain available.");
+      }
+    }
+    void loadDetail();
+    return () => controller.abort();
+  }, [selectedVenue, selectedSymbol, pipeline?.asOf]);
   useEffect(() => {
     if (!selected) return;
     const previous = document.body.style.overflow;
@@ -202,7 +227,8 @@ export default function ChartWall() {
   const visibleFrames = frame === "All frames" ? FRAMES : [frame];
   const markets = pipeline?.markets.filter(m => (venue === "All venues" || m.venue === venue) && `${m.symbol} ${m.category}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   const key = (m: ChartMarket) => `${m.venue}|${m.symbol}`;
-  const chosen = pipeline?.markets.find(m => key(m) === selected?.market);
+  const detailPipeline = detail && detail.market === selected?.market ? detail.pipeline : null;
+  const chosen = detailPipeline?.markets[0] ?? chosenPreview;
   const reading = chosen && selected ? chosen.frames[selected.frame] : null;
   return <section className="chart-workspace" id="charts">
     <div className="chart-wall-heading"><div><span className="eyebrow">Market analysis</span><h2>{pipeline ? pipeline.markets.length * FRAMES.length : "…"} candlestick charts</h2><p>Closed candles · EMA20 / EMA50 · volume · pattern markers</p></div><div className="snapshot-time"><strong>{pipeline?.asOf.replace("T", " ") ?? "Loading market data"}</strong><small>{pipeline ? `Last scan ${number(pipeline.processingSeconds)}s · minute schedule` : "Waiting for Dublin"}</small></div></div>
@@ -240,9 +266,11 @@ export default function ChartWall() {
       }}>
         <header className="chart-modal-header"><div><h2>{chosen.symbol} · {selected.frame}</h2><p>{chosen.venue} · {reading.status} · {reading.reason}</p></div><button autoFocus onClick={() => setSelected(null)} aria-label="Close chart">Close ×</button></header>
         <nav aria-label="Selected chart timeframe">{FRAMES.map(f => <button key={f} aria-pressed={selected.frame === f} onClick={() => setSelected({ ...selected, frame: f })}>{f}</button>)}</nav>
+        {detailError && <p className="alert">{detailError}</p>}
+        {detailPipeline && <small>Detail snapshot: {detailPipeline.asOf.replace("T", " ")}</small>}
         <LargeChart suite={reading.technicalSuite} title={`${chosen.symbol} ${selected.frame}`} />
         <p className="chart-legend">Amber: EMA20 · blue: EMA50 · purple: confirmed-swing trendlines · dots: candlestick detections. Hover a candle for its patterns. Drag to pan; scroll to zoom.</p>
-        <Evidence suite={reading.technicalSuite} pipeline={pipeline!} />
+        <Evidence suite={reading.technicalSuite} pipeline={detailPipeline ?? pipeline!} />
       </section>
     </div>}
   </section>;

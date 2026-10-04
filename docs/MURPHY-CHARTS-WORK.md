@@ -70,3 +70,12 @@ User requested six more hours on 2026-10-04. Follow-up scheduled every 30 minute
 - Short-warmup Murphy panels now show warming/waiting_swings and per-indicator availability rather than empty descriptive values. Full book remains incomplete.
 - Read-only two-hour crypto history comparison at approximately 19:17 UTC returned BTC 94, ETH 15 and SOL 41 actual minute bars. None filled missing timestamps in the current cache. Observed holes therefore persist in the same provider's historical response; no flat/synthetic candles inserted, no claim that a transport restart fixes sparse trades.
 - Public CI passed for both chart-gap commit be053f7 and audit commit 33d6b54. Divergence changes are checked separately before publication.
+
+## Preview payload refinement
+
+- Wall response now retains every chart's actual candles, EMA overlays, latest detected pattern codes and one actual marker per detection candle. Full per-instrument details are fetched only when opened, including every pattern event, all indicator outputs and Murphy panels. Broker history is still excluded.
+- Same 19:24 UTC local snapshot serialization: full payload 17,664,926 bytes; preview 7,409,453 bytes; 58.06% reduction computed from those byte counts. This measures JSON size, not broker latency, throughput or HFT execution performance.
+- 27 web tests passed, including preview/detail preservation and exclusion of private broker fields. Production build/typecheck passed after fixing a null detail-state check.
+- Browser verified the EUR 1h detail, ten Murphy panels, all 61 catalog rows, 113 indicator rows and 239 actual catalog detections across the displayed candles. Historical divergence confirmation close and current evaluation are separately visible. Restored all 455 cards after verification; proof `.local/murphy-current-monitor.png`.
+- Actual HTTP check: preview 7,410,027 bytes / 2.46 seconds with 91 markets; expanded response contained one instrument and full analysis. Partial selector returns 400; unknown instrument returns 404. Payload reduction did not demonstrate a latency improvement versus the earlier 2.31-second sample; these are individual requests, not a controlled latency benchmark.
+- Public CI passed for divergence commit 6fa8170. Preview changes are deployed on localhost; scoped commit and CI complete this milestone. Six-hour follow-up remains active until 00:29:46 UTC; elapsed time is not active development evidence.

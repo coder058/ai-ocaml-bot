@@ -3,6 +3,7 @@ import type { FrameName, FrameReading, MarketPipeline } from "./telemetry";
 export type Bar = { t: string; o: number; h: number; l: number; c: number; v: number };
 export type CatalogItem = { code: string; name: string; group?: string; lookback: number; parameters: Record<string, number> };
 export type TechnicalSuite = {
+  detailLevel?: "preview" | "full";
   status: string; reason?: string; bars: Bar[]; contiguousBars?: number;
   patterns: Record<string, { status: string; value: number | null; requiredBars?: number }>;
   patternEvents: { time: string; code: string; name: string; value: number }[];
