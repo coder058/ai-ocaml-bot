@@ -1,5 +1,10 @@
 # AI OCaml Bot
 
+**Development and VPS collection/execution are frozen from 5 October 2026.**
+The active project is [Event Desk](https://github.com/coder058/event-desk).
+Retained behavior below describes the historical implementation; see the
+[shutdown record](docs/history/SHUTDOWN.md) for actual service and broker checks.
+
 An auditable live market monitor and **Alpaca paper-only** execution experiment,
 written in OCaml. This is an independent portfolio project, not affiliated with
 Alpaca. It does not claim a profitable strategy.
