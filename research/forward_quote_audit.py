@@ -26,7 +26,12 @@ def reference(value):
     checked=normalize_at({"t":value["quoteAt"],"bp":value["bid"],"ap":value["ask"],"bs":value["bidSizeRaw"],"as":value["askSizeRaw"]},value["receivedAt"],venue,symbol)
     if value.get("status")!="fresh" or checked["status"]!="fresh" or value.get("feed")!=checked["feed"]:
         raise ValueError("quote was not fresh on its actual source feed")
-    return {**checked,"received":quote_time(value["receivedAt"]),"at":quote_time(value["quoteAt"])}
+    received=quote_time(value["receivedAt"])
+    transport=value.get("transport") if value.get("transport") in ("rest_batch","existing_archived_websocket") else "not_recorded"
+    checked_at=quote_time(value["referenceCheckedAt"]) if transport=="existing_archived_websocket" else None
+    if checked_at is not None and checked_at<received:
+        raise ValueError("archive reference check predates actual captured receipt")
+    return {**checked,"received":received,"at":quote_time(value["quoteAt"]),"transport":transport,"checked":checked_at}
 
 
 def read_quotes(path):
@@ -92,7 +97,7 @@ def report(frames,quotes,*,horizon_bars,max_exit_lag_seconds,split_at,crypto_tak
         try:
             observed=quote_time(row["observedAtText"])
             entry=reference(row.get("quoteReference"))
-            if (entry["venue"],entry["symbol"])!=(row["venue"],row["symbol"]) or entry["received"]>observed or observed>known_at or observed-entry["at"]>MAX_QUOTE_AGE_SECONDS:
+            if (entry["venue"],entry["symbol"])!=(row["venue"],row["symbol"]) or entry["received"]>observed or observed>known_at or observed-entry["at"]>MAX_QUOTE_AGE_SECONDS or entry["checked"] is not None and entry["checked"]>observed:
                 raise ValueError("entry scope/receipt does not precede observed features")
         except (ValueError,KeyError,TypeError,OverflowError):
             rejected["noFirstObservedFreshEntryQuote"]+=1;continue
@@ -114,6 +119,7 @@ def report(frames,quotes,*,horizon_bars,max_exit_lag_seconds,split_at,crypto_tak
             "fold":"discovery" if observed<split else "validation", "patterns":row["patterns"],
             "observedPolicy":row.get("policy"),"observedCandidate":row.get("candidate"),
             "signalObservedAt":row["observedAtText"],"entryReferenceReceivedAt":entry["receivedAt"],
+            "entryReferenceTransport":entry["transport"],
             "exitReferenceReceivedAt":exit_quote["receivedAt"],"holdingSeconds":float(exit_quote["received"]-observed),
             "exitLagSeconds":float(exit_quote["received"]-due),"entryAskReference":entry["ask"],"exitBidReference":exit_quote["bid"],
             "longQuoteReferenceMoveBps":(ratio-1)*BPS,"modeledCryptoAfterFeeBps":modeled_net})
@@ -143,6 +149,7 @@ def report(frames,quotes,*,horizon_bars,max_exit_lag_seconds,split_at,crypto_tak
     return {"schema":"first_observed_long_quote_reference_v1","orderAuthority":False,"winProbability":None,"brokerPnl":None,
         "horizonBars":horizon_bars,"maxExitLagSeconds":max_exit_lag_seconds,"splitAt":split_at,"cryptoTakerBpsScenario":crypto_taker_bps,
         "labelCount":len(labels),"foldCounts":dict(Counter(row["fold"] for row in labels)),"rejected":dict(rejected),
+        "entryTransportCounts":dict(Counter(row["entryReferenceTransport"] for row in labels)),
         "comparisonCount":len(comparisons),"comparisons":comparisons,"summary":stats(labels),"labels":labels,"frozenPolicySubset":policy_subset,
         "limits":["Sampled bid/ask references are not orders, fills or guaranteed executable prices",
                   "No order latency, queue, partial fills, impact or normalized size/depth model",

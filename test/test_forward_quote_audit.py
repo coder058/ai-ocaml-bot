@@ -34,6 +34,17 @@ def audit(frames=None, exits=None, **updates):
         [reference(quote("2026-10-04T22:01:00Z","2026-10-04T22:01:01Z",bid=110,ask=111))] if exits is None else exits,**settings)
 
 class QuoteAuditTests(unittest.TestCase):
+    def test_archived_entry_requires_earlier_actual_read_as_well_as_original_receipt(self):
+        entry={**quote(),"transport":"existing_archived_websocket","referenceCheckedAt":START}
+        result=audit([frame(entry=entry)])
+        self.assertEqual(result["labelCount"],1)
+        self.assertEqual(result["entryTransportCounts"],{"existing_archived_websocket":1})
+        late={**entry,"referenceCheckedAt":"2026-10-04T22:00:00.000000001Z"}
+        self.assertEqual(audit([frame(entry=late)])["labelCount"],0)
+        for bad in ({k:v for k,v in entry.items() if k!="referenceCheckedAt"},
+                    {**entry,"referenceCheckedAt":"2026-10-04T21:59:59Z"}):
+            self.assertEqual(audit([frame(entry=bad)])["labelCount"],0)
+
     def test_spread_and_received_asset_fee_scenario_are_explicit_not_pnl(self):
         result=audit()
         self.assertEqual(result["labelCount"],1)

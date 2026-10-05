@@ -38,6 +38,10 @@ test("observed quote reference never replaces risk readiness or historical order
   assert.match(stage.detail,/not a fill/);
   assert.equal(row.steps.find(s=>s.stage==='Risk / ownership').state,'unknown');
   assert.equal(executionView(t,now).orders.length,0);
+  r.quoteReference.transport='existing_archived_websocket';
+  assert.match(executionView(t,now).rows.find(r=>r.symbol==='ETH/USD'&&r.frame==='30m').steps.find(s=>s.stage==='Observed bid / ask reference').detail,/existing captured WebSocket/);
+  r.quoteReference.transport='PRIVATE_TRANSPORT';
+  assert.equal(JSON.stringify(executionView(t,now)).includes('PRIVATE_TRANSPORT'),false);
   r.quoteReference.orderAuthority=true;
   assert.equal(executionView(t,now).rows.find(r=>r.symbol==='ETH/USD'&&r.frame==='30m').steps.find(s=>s.stage==='Observed bid / ask reference').state,'unknown');
   r.quoteReference={purpose:'observed_quote_reference_not_execution',orderAuthority:false,winProbability:null,status:'invalid',reason:'empty_or_negative_provider_size'};

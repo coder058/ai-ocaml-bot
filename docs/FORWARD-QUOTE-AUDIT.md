@@ -141,3 +141,15 @@ October 5: 2,149,397 bytes, SHA-256
 47,268 stream references passed source/receipt/freshness/price/size checks;
 43,918 were unusable; 98,723 non-quote events were excluded. All prefixes and
 full comparison rows remain in the private reproducible report.
+
+## Prospective entry-source extension — 5 October
+
+From the 01:15 UTC production scan, newly observed features can retain actual
+recent receipts from the existing bounded WebSocket capture tail. Earlier
+feature rows cannot gain later quotes. The entry reference must retain its
+original captured reception plus `referenceCheckedAt`; the audit rejects checks
+later than feature observation or earlier than captured receipt. It reports
+`entryTransportCounts`, including `not_recorded` for older rows, rather than
+inferring historical transport. This changes acquisition for new observations,
+not the frozen horizon, temporal split, fee scenario, long membership or order
+policy. It is not evidence of improved returns or execution.

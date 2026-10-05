@@ -96,7 +96,7 @@ def collect(request, universes, credentials, now=lambda: datetime.now(timezone.u
             if any(symbol not in symbols for symbol in payload["quotes"]):
                 raise ValueError("unexpected quote instrument")
             for symbol in symbols:
-                result[venue + "|" + symbol] = normalize(payload["quotes"].get(symbol), received_at, venue, symbol)
+                result[venue + "|" + symbol] = {**normalize(payload["quotes"].get(symbol), received_at, venue, symbol), "transport":"rest_batch"}
         except Exception as error:
             errors.append({"venue": venue, "stage": "quote_reference", "error": type(error).__name__})
             received_at = now()

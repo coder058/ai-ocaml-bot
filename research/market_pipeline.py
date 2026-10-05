@@ -26,6 +26,7 @@ from murphy_analysis import enrich, required_seed_bars, forward_reading
 from primary_trend_context import collect as collect_primary_context
 from hip3_primary_context import collect as collect_hip3_primary_context
 from decision_quote_capture import collect as collect_decision_quotes
+from archived_quote_reference import augment as augment_archived_quotes
 
 # SOURCE: requested timeframes and official Alpaca / Hyperliquid interval names.
 FRAMES = {"1m": (1, "1Min"), "5m": (5, "5Min"), "30m": (30, "30Min"),
@@ -437,6 +438,9 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     elapsed("descriptive_technical_analysis")
     quote_references, quote_errors = collect_decision_quotes(request, universes, credentials)
     elapsed("quote_reference_requests")
+    quote_references, archive_quote_coverage = augment_archived_quotes(quote_references, universes,
+        STATE / "market-capture", datetime.now(timezone.utc))
+    elapsed("captured_quote_reference")
     errors.extend(quote_errors)
     seen_quotes = cache.setdefault("recordedQuoteReferences", {})
     with output.with_name("market-quotes-reference.jsonl").open("a", encoding="utf-8") as target:
@@ -486,6 +490,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     atomic(cache_path, cache)
     elapsed("evidence_and_cache_write")
     result["timingsSeconds"] = timings
+    result["archiveQuoteCoverage"] = archive_quote_coverage
     result["newFrameDecisions"] = len(decisions)
     result["currentCandidates"] = sum(reading.get("candidate") is not None
         for market in result["markets"] for reading in market["frames"].values())

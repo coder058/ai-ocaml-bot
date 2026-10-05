@@ -135,3 +135,36 @@ from these first two receipts. Monthly history, full Murphy methodology and
 execution/spot-FX adapters remain incomplete; these contracts are perpetuals.
 
 Source: [Hyperliquid native candle API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint).
+
+## Prospective captured quote references
+
+`research/archived_quote_reference.py` reads bounded frozen tails of the existing
+Alpaca crypto/IEX archives after the normal REST batch. No extra connection,
+subscription, credential or order path is added. The 1 MiB per daily file limit
+is an **uncalibrated operational choice**; omitted older records are unavailable.
+The preceding UTC day handles midnight rotation. Partial first/final records,
+bad scope, future receipts and ambiguous duplicates cannot supply a reference.
+
+The latest actually received quote per instrument is examined, without selecting
+a favorable price. It must have valid bid/ask/positive sizes and remain within
+the inherited five-second source **and receipt** guard at the real read cutoff.
+It replaces REST only when REST is unavailable/stale or has an older source
+timestamp. An invalid latest archived quote cannot fall back to an older archived
+price. Actual captured nanosecond receipt and separate archive-read timestamp
+are retained; the execution desk names REST or existing captured WebSocket.
+Risk remains unknown until actual router preflight; these are not fills.
+
+This source change began with the 01:15 UTC production scan on 5 October. Old
+first-observed feature rows remain immutable. The quote audit independently
+requires the archived reference read to precede the feature observation as well
+as checking freshness, and reports source counts without treating them as
+winning probabilities. At the initial 350,444,619-byte feature prefix the new
+cohort had 24 first feature records, all REST: seven fresh-at-receipt BTC and
+17 stale. No stock session or archived-source coverage improvement was proven
+by that cohort. A separate 01:14:35 read-only probe found two fresh stream
+references in 0.0874s; the actual 01:19 archive phase took 0.0819s. Different
+snapshots are not a controlled improvement measurement or a latency guarantee.
+
+`archiveQuoteCoverage` records actual archive read status/byte counts, source
+and receipt ages, latest invalid/stale diagnostics and selection. A healthy
+stream process does not guarantee a new valid quote for each instrument.
