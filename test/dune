@@ -52,3 +52,8 @@
  (name test_stock_policy)
  (modules test_stock_policy)
  (libraries paper_market))
+
+(test
+ (name test_fx_order_plan)
+ (modules test_fx_order_plan)
+ (libraries paper_market fx_planning))

@@ -1,0 +1,5 @@
+; SOURCE: keep future FX preparation in a separate library so adding a module
+; does not change the paper_market alias or the frozen stock analyzer binary.
+(library
+ (name fx_planning)
+ (libraries paper_market yojson unix))

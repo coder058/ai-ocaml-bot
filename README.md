@@ -44,6 +44,7 @@ no new automatic stock strategy is armed. Conventional
 FX requires an OANDA v20 practice account; its data connector currently reports
 missing credentials and has no FX order adapter. Currency ETFs and Hyperliquid
 FX-like perps are labeled as such. See [connections and operations](docs/CONNECTIONS.md),
+[pure FX request preparation and its limits](docs/FX-REQUEST-PLANNING.md),
 [the market pipeline](docs/MARKET-PIPELINE.md) and
 [the ongoing refinement log](docs/EIGHT-HOUR-REFINEMENT.md).
 

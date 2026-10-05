@@ -63,6 +63,12 @@ the five-frame cache. FX tick volume is price-update count and midpoint OHLC is
 not executable bid/ask pricing. The current adapter collects data; an owned,
 reconciled FX execution adapter still has to be implemented and tested.
 
+A [pure OCaml FX request planner](FX-REQUEST-PLANNING.md) now prepares exact
+base-unit allocation from account-specific prices/home conversions, actual
+precision, explicit price bounds and caller-supplied stops. Its synthetic checks
+do not connect a practice account. HTTP submission, durable FX ownership and
+uncertain-response reconciliation remain incomplete; order authority stays off.
+
 Hyperliquid testnet catalog inspection found `xyz:EUR` and `xyz:JPY`; a funded
 testnet wallet and tested signing/risk adapter would still be required for its
 orders. These contracts cannot replace ten conventional currency pairs.
