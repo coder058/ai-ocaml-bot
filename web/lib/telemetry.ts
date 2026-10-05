@@ -12,6 +12,9 @@ export type PaperOrder = {
   assetClass?: string;
   orderType?: string;
   timeInForce?: string;
+  requestedQty?: string | null;
+  requestedNotional?: string | null;
+  limitPrice?: string | null;
 };
 
 export type PaperFill = {

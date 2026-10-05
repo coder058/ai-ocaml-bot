@@ -148,6 +148,11 @@ and acceptance gates; it does not claim unbuilt steps are implemented.
 
 ## Trading desk
 
+The [BTC order lifecycle](docs/BTC-ORDER-LIFECYCLE.md) validates exact durable
+identity/quantity before reconciliation and retains factual pre-submit checks
+for new orders. Unknown historical facts stay unavailable. This hardens the
+existing paper demonstration; it does not establish a profitable strategy.
+
 [Native daily/weekly context](docs/PRIMARY-TREND-CONTEXT.md) augments the five
 intraday Murphy panels for monitored Alpaca instruments. Public HIP-3
 instruments now retain their own actual daily/weekly data and native

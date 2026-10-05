@@ -150,6 +150,9 @@ def broker_orders(credentials: dict[str, str]) -> tuple[list[dict[str, object]],
             "assetClass": order.get("asset_class"),
             "orderType": order.get("type"),
             "timeInForce": order.get("time_in_force"),
+            "requestedQty": order.get("qty"),
+            "requestedNotional": order.get("notional"),
+            "limitPrice": order.get("limit_price"),
         })
     # USD-denominated crypto fee rows do not carry an order ID or symbol. They
     # can only be attributed to the lab when every account crypto order is
@@ -359,7 +362,7 @@ def journal() -> tuple[list[dict[str, str]], bool, list[dict[str, str]]]:
     # SOURCE: the complete local journal is needed to preserve the decision
     # trace for older broker orders after the public journal window rolls on.
     decision_rows = [row for row in rows if row["message"].startswith(
-        ("HOT_DECISION ", "HOT_SAMPLE "))]
+        ("HOT_DECISION ", "HOT_SAMPLE ", "BTC_PREFLIGHT "))]
     return rows[-MAX_JOURNAL_LINES:], complete, decision_rows
 
 
@@ -384,13 +387,59 @@ def public_journal(events: list[dict[str, str]],
     return selected
 
 
+def exact_utc_clock(value: str) -> Decimal:
+    # SOURCE: UTC RFC3339 seconds with up to nine actual fractional digits;
+    # preserve provider nanoseconds rather than datetime microsecond truncation.
+    parts=re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z",value)
+    if not parts: raise ValueError("invalid UTC clock")
+    seconds=int(datetime.fromisoformat(parts[1]+"+00:00").timestamp())
+    return Decimal(seconds)+Decimal("0."+(parts[2] or "0"))
+
+
+def btc_preflight(row: dict, order: dict, decision: dict) -> dict[str,str] | None:
+    """Exact durable ID/side and pre-submit time, strict public facts whitelist."""
+    try:
+        if crypto_symbol(order.get("symbol"))!="BTC/USD":return None
+        prefix,body=row["message"].split(" evidence=",1)
+        fields=dict(token.split("=",1) for token in prefix.split()[1:])
+        if fields!={"id":order["clientOrderId"],"side":order["side"]}:return None
+        at=exact_utc_clock(row["at"])
+        if not exact_utc_clock(decision["observedAt"])<=at<=exact_utc_clock(order["submittedAt"]):return None
+        value=json.loads(body)
+        if not isinstance(value,dict):return None
+        checks=("accountReady","pendingIntentClear","openOrdersClear","ownershipMarkerConsistent")
+        if any(value.get(key) is not True for key in checks):return None
+        if value.get("sourceQuoteTime")!=decision.get("quote_time"):return None
+        # SOURCE: same existing five-second source/receipt execution guard.
+        if not 0<=at-exact_utc_clock(value["sourceQuoteTime"])<=5:return None
+        expected={"buyingPowerCheck":"passed","exposureCheck":"passed"} if order["side"]=="buy" else {
+            "buyingPowerCheck":"not_required_for_owned_exit","exposureCheck":"risk_reducing_owned_exit"}
+        if any(value.get(key)!=text for key,text in expected.items()):return None
+        for key in ("requestedQty","limitPrice"):
+            if not isinstance(value.get(key),str):return None
+            decimal=Decimal(value[key])
+            if not decimal.is_finite() or decimal<=0:return None
+        for key in ("sourceQuoteAgeNs","receiptQuoteAgeNs"):
+            text=value.get(key)
+            if not isinstance(text,str) or not re.fullmatch(r"\d+",text) or int(text)>5_000_000_000:return None
+        projected={key:value[key] for key in (*checks,*expected,"requestedQty","limitPrice",
+            "sourceQuoteTime","sourceQuoteAgeNs","receiptQuoteAgeNs")}
+        return {"preflight_observed_at":row["at"],"preflight_evidence":json.dumps(projected)}
+    except (ValueError,KeyError,TypeError,OverflowError,InvalidOperation):return None
+
+
 def decision_history(events: list[dict[str, str]],
                      orders: list[dict[str, object]]) -> dict[str, dict[str, str]]:
     """Join logged quote decisions to broker order IDs without guessing proximity."""
     decisions: dict[str, dict[str, str]] = {}
     samples: dict[str, dict[str, str]] = {}
+    preflights: dict[str, list[dict]] = {}
     for row in events:
         message = row["message"]
+        if message.startswith("BTC_PREFLIGHT "):
+            tokens=dict(token.split("=",1) for token in message.split(" evidence=",1)[0].split()[1:] if "=" in token)
+            preflights.setdefault(tokens.get("id",""),[]).append(row)
+            continue
         if not message.startswith(("HOT_DECISION ", "HOT_SAMPLE ")):
             continue
         fields = dict(token.split("=", 1) for token in message.split()[1:]
@@ -425,6 +474,13 @@ def decision_history(events: list[dict[str, str]],
         suffix = client_id[len(prefix):]
         if suffix in decisions:
             result[order_id] = {**decisions[suffix], **samples.get(suffix, {})}
+            rows=preflights.get(client_id,[])
+            # Duplicate/differing retained intents are ambiguous, never choose
+            # a nearby/latest row to explain broker risk checks.
+            unique={(row["at"],row["message"]) for row in rows}
+            if len(unique)==1:
+                facts=btc_preflight(rows[0],order,result[order_id])
+                if facts:result[order_id].update(facts)
     return result
 
 

@@ -155,3 +155,43 @@ test("installed stock observation, stale scheduler, owned inventory and long-onl
   assert.equal(r.steps.find(s => s.stage === "Execution route").state, "blocked");
   assert.match(r.steps.find(s => s.stage === "Execution route").detail, /long entries only/);
 });
+
+test("retained order risk facts have their own prior clock and public whitelist",()=>{
+  const t=fixture();
+  t.orders=[{id:'risk',clientOrderId:'jsbotbtcbuyRisk',symbol:'BTC/USD',side:'buy',status:'filled',filledQty:'0.001',
+    submittedAt:'2026-10-04T19:59:50.500Z'}];
+  t.decisionHistory={risk:{policy:'quote_cross_30s_v1',observedAt:'2026-10-04T19:59:49.100Z',
+    quote_time:'2026-10-04T19:59:49Z',preflight_observed_at:'2026-10-04T19:59:50.100Z',
+    preflight_evidence:JSON.stringify({accountReady:true,pendingIntentClear:true,requestedQty:'0.001',buyingPowerCheck:'passed',
+      unknown:'PRIVATE',ownedQuantity:'PRIVATE',receiptQuoteAgeNs:'100000000'})}};
+  let result=executionView(t,now).orders[0];
+  assert.equal(result.preflight.observedAt,'2026-10-04T19:59:50.100Z');
+  assert.deepEqual(result.preflight.facts.find(f=>f.label==='No unresolved durable intent'),{label:'No unresolved durable intent',value:'Yes'});
+  assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
+  t.decisionHistory.risk.preflight_observed_at='2026-10-04T19:59:51Z';
+  assert.equal(executionView(t,now).orders[0].preflight,null);
+  assert.ok(executionView(t,now).orders[0].evidence);
+  t.decisionHistory.risk.preflight_observed_at='2026-10-04T19:59:48Z';
+  assert.equal(executionView(t,now).orders[0].preflight,null);
+  t.decisionHistory.risk.preflight_observed_at='2026-10-04T19:59:50.100Z';
+  t.decisionHistory.risk.preflight_evidence='invalid json';
+  assert.equal(executionView(t,now).orders[0].preflight,null);
+});
+
+test("original broker budget is distinct from a partial fill and unknown market valuation",()=>{
+  const t=fixture();
+  t.orders=[{id:'budget',clientOrderId:'jsbotbtcbuyBudget',symbol:'BTC/USD',side:'buy',status:'canceled',
+    orderType:'limit',requestedQty:'1',limitPrice:'100',filledQty:'0.1',submittedAt:at}];
+  t.fills=[{id:'fill',orderId:'budget',symbol:'BTC/USD',side:'buy',qty:'0.1',price:'100',transactionTime:at}];
+  let result=executionView(t,now).orders[0];
+  assert.equal(result.request.notional,100);assert.equal(result.fill.notional,10);
+  assert.equal(result.request.basis,'Broker quantity × limit price');
+  t.orders[0].orderType='market';
+  assert.equal(executionView(t,now).orders[0].request.notional,null);
+  t.orders[0].requestedNotional='50';
+  assert.equal(executionView(t,now).orders[0].request.notional,50);
+  t.orders[0].requestedNotional='NaN';t.orders[0].requestedQty='PRIVATE';
+  result=executionView(t,now).orders[0];
+  assert.equal(result.request.notional,null);assert.equal(result.request.quantity,null);
+  assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
+});

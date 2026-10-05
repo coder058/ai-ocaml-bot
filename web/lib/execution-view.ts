@@ -94,7 +94,35 @@ function rowFor(t: PaperTelemetry, market: NonNullable<PaperTelemetry["marketPip
     candidate: pipelineFresh ? r?.candidate ?? null : null, route: route.name, routeReason: route.reason, steps };
 }
 
-const EVIDENCE_FIELDS = ["policy", "reason", "frame", "signal_bar", "observedAt", "quote_time", "trigger_quote_time", "reference_quote_time", "reference_bid", "reference_ask", "current_bid", "current_ask", "trigger_move_bps", "trigger_bid", "trigger_ask", "invalidation_level", "ema20", "ema50", "rsi14", "macd", "macd_signal", "trend", "candle_shapes", "bar_close", "preflight_evidence"];
+const EVIDENCE_FIELDS = ["policy", "reason", "frame", "signal_bar", "observedAt", "quote_time", "trigger_quote_time", "reference_quote_time", "reference_bid", "reference_ask", "current_bid", "current_ask", "trigger_move_bps", "trigger_bid", "trigger_ask", "invalidation_level", "ema20", "ema50", "rsi14", "macd", "macd_signal", "trend", "candle_shapes", "bar_close"];
+function preflightFacts(raw: Record<string, string> | undefined, submittedAt: string) {
+  if (!raw?.preflight_evidence) return null;
+  const observedAt=raw.preflight_observed_at ?? raw.observedAt;
+  const recorded=Date.parse(observedAt ?? "");
+  const submitted=Date.parse(submittedAt);
+  // SOURCE: bound old whole-second journal timestamps by their full interval.
+  const interval=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(observedAt ?? "") ? 1_000 : 0;
+  if (!Number.isFinite(recorded) || recorded+interval>submitted || recorded<Date.parse(raw.observedAt ?? "")) return null;
+  try {
+    const input=JSON.parse(raw.preflight_evidence) as Record<string,unknown>;
+    const labels: Record<string,string>={accountReady:"Account ready",pendingIntentClear:"No unresolved durable intent",
+      openOrdersClear:"No open broker orders",ownershipMarkerConsistent:"Ownership marker / position agree",
+      buyingPowerCheck:"Buying power check",exposureCheck:"Exposure check",requestedQty:"Requested quantity",
+      limitPrice:"Limit price",sourceQuoteTime:"Source quote time",sourceQuoteAgeNs:"Source age · nanoseconds",
+      receiptQuoteAgeNs:"Receipt age · nanoseconds",regularSessionOpen:"Regular session open",
+      buyingPowerChecked:"Buying power checked",buyingPowerSufficient:"Buying power sufficient",
+      brokerQuantity:"Broker quantity",ownedQuantity:"Owned quantity",existingOrders:"Existing orders"};
+    const facts=Object.entries(labels).flatMap(([key,label]) => {
+      const value=input?.[key];
+      return typeof value==="boolean" ? [{label,value:value ? "Yes" : "No"}] :
+        typeof value==="number" && Number.isFinite(value) ? [{label,value:String(value)}] :
+        typeof value==="string" && (key==="buyingPowerCheck" || key==="exposureCheck") ?
+          ["passed","not_required_for_owned_exit","risk_reducing_owned_exit"].includes(value) ? [{label,value:value.replaceAll("_"," ")}] : [] :
+        typeof value==="string" && (key==="sourceQuoteTime" ? value===raw.quote_time && Number.isFinite(Date.parse(value)) && Date.parse(value)<=recorded : /^(?:\d+(?:\.\d+)?)(?:e[+-]?\d+)?$/i.test(value) && Number.isFinite(Number(value))) ? [{label,value}] : [];
+    });
+    return facts.length ? {observedAt,facts} : null;
+  } catch {return null;}
+}
 function newOrders(t: PaperTelemetry, now: number) {
   const fills = botFills(t);
   return botOrders(t).filter(o => {
@@ -118,10 +146,19 @@ function newOrders(t: PaperTelemetry, now: number) {
       (!quote || Number.isFinite(quoteAt) && (secondsOnly ? quoteAt < observedEnd : quoteAt <= observedEnd) && quoteAt <= submitted);
     const evidence = prior ? Object.fromEntries(EVIDENCE_FIELDS.filter(key => typeof raw[key] === "string").map(key => [key, raw[key]])) : null;
     const fill = orderFillSummary(order, fills.filter(f => canonical(f.symbol) === canonical(order.symbol) && f.side === order.side));
+    // SOURCE: original broker order fields. A limit valuation is quantity ×
+    // limit, not the eventual fill price or an inferred market-order budget.
+    const positive=(text:unknown)=>typeof text==="string" && text.trim()!=="" && Number.isFinite(Number(text)) && Number(text)>0 ? Number(text) : null;
+    const requestedQty=positive(order.requestedQty),limitPrice=positive(order.limitPrice),explicitNotional=positive(order.requestedNotional);
+    const limitNotional=order.orderType==="limit" && requestedQty!=null && limitPrice!=null && Number.isFinite(requestedQty*limitPrice) ? requestedQty*limitPrice : null;
+    const request={quantity:requestedQty,limitPrice,notional:explicitNotional ?? limitNotional,
+      basis:explicitNotional!=null ? "Broker requested notional" : limitNotional!=null ? "Broker quantity × limit price" : "Requested notional unavailable"};
     return { id: order.id, clientOrderId: order.clientOrderId, symbol: canonical(order.symbol), side: order.side,
       submittedAt: order.submittedAt!, status: orderDisplayStatus(order), brokerFilledQty: order.filledQty,
+      request,
       fill: { quantity: fill.quantity, notional: fill.notional, averagePrice: fill.averagePrice, fillCount: fill.fillCount },
       evidence, evidencePrecision: evidence ? secondsOnly ? "Journal time has one-second resolution; its full interval precedes broker submission." : "Recorded timestamp precedes broker submission." : null,
+      preflight:evidence ? preflightFacts(raw,order.submittedAt!) : null,
       reason: evidence ? reasonForOrder(order, evidence) : "Pre-submit evidence unavailable or its timing cannot be verified. No reason is reconstructed." };
   });
 }

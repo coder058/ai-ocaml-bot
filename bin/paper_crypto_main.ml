@@ -37,10 +37,14 @@ let remove_if_exists path = if Sys.file_exists path then Sys.remove path
 
 let log fmt =
   Printf.ksprintf (fun s ->
-    let tm = Unix.gmtime (Unix.time ()) in
-    let timestamp = Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ"
+    let now=Unix.gettimeofday () in
+    let seconds=floor now in
+    let tm = Unix.gmtime seconds in
+    (* SOURCE: gettimeofday's measured clock is recorded at microsecond
+       resolution, not fabricated nanosecond precision or rounded seconds. *)
+    let timestamp = Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d.%06dZ"
       (tm.tm_year + 1900) (tm.tm_mon + 1) tm.tm_mday
-      tm.tm_hour tm.tm_min tm.tm_sec in
+      tm.tm_hour tm.tm_min tm.tm_sec (int_of_float ((now-.seconds)*.1_000_000.)) in
     Printf.printf "%s %s\n%!" timestamp s;
     let row = Yojson.Safe.to_string (`Assoc [
       "at", `String timestamp; "message", `String s ]) in
@@ -131,20 +135,41 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
                  (position_qty *. current.ask +. notional > Paper_crypto.max_position_notional) then
                  (* # SOURCE: user's $500 maximum paper bet; turnover has no daily cap. *)
                  log "HOLD new buy would exceed user $500 BTC position cap"
-               else if (match received_ns with
-                 | None -> false
-                 | Some received_ns ->
-                   let age = quote_age_ns received_ns in
-                   age < 0 || age > max_quote_age_ns) then
-                 log "HOLD hot quote became stale before paper submission"
                else (
+                 let freshness=Btc_quote_clock.validate
+                   ~now_ns:(Int64.of_float (Unix.gettimeofday () *. 1_000_000_000.))
+                   ~max_age_ns:(Int64.of_int max_quote_age_ns)
+                   ~received_ns:(Option.map Int64.of_int received_ns) ~timestamp:current.timestamp in
+                 match freshness with
+                 | Error reason -> log "HOLD %s before paper submission" reason
+                 | Ok (source_age,receipt_age) ->
                  let id = client_id side current.timestamp in
                  (* SOURCE: retain the exact nine-decimal wire quantity with
                     intent before POST; legacy two-field intents still reconcile. *)
                  write_atomic pending_path (Printf.sprintf "%s %s %.9f" side id qty);
+                 let preflight=`Assoc [
+                   "accountReady",`Bool true; "pendingIntentClear",`Bool true;
+                   "openOrdersClear",`Bool true; "ownershipMarkerConsistent",`Bool true;
+                   "buyingPowerCheck",`String (if side="buy" then "passed" else "not_required_for_owned_exit");
+                   "exposureCheck",`String (if side="buy" then "passed" else "risk_reducing_owned_exit");
+                   "requestedQty",`String (Printf.sprintf "%.9f" qty);
+                   "limitPrice",`String (string_of_float price);
+                   "sourceQuoteTime",`String current.timestamp;
+                   "sourceQuoteAgeNs",`String (Int64.to_string source_age);
+                   "receiptQuoteAgeNs",(match receipt_age with None -> `Null | Some age -> `String (Int64.to_string age))] in
+                 log "BTC_PREFLIGHT id=%s side=%s evidence=%s" id side (Yojson.Safe.to_string preflight);
                  log "SEND paper %s BTC/USD qty=%.9f limit=%g id=%s" side qty price id;
                  let submitted_ns =
                    int_of_float (Unix.gettimeofday () *. 1_000_000_000.) in
+                 (* SOURCE: durable fsync/logging can consume quote lifetime;
+                    recheck after those writes, immediately before the POST. *)
+                 (match Btc_quote_clock.validate ~now_ns:(Int64.of_int submitted_ns)
+                   ~max_age_ns:(Int64.of_int max_quote_age_ns)
+                   ~received_ns:(Option.map Int64.of_int received_ns) ~timestamp:current.timestamp with
+                 | Error reason ->
+                   log "NOT_SENT id=%s reason=%s durable_write_exceeded_quote_lifetime=true" id reason;
+                   remove_if_exists pending_path
+                 | Ok _ ->
                  let response = Paper_broker.submit_ioc ~side ~qty ~limit_price:price
                      ~client_order_id:id in
                  let responded_ns =
@@ -167,7 +192,7 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
                  | Error e -> log "UNCERTAIN submission: %s; journal retained" e
                  | Ok order ->
                    log "ACK id=%s status=%s" id
-                     (Option.value (Paper_broker.order_status order) ~default:"unknown"))))
+                     (Option.value (Paper_broker.order_status order) ~default:"unknown")))))
 
 let shadow_decision (previous : Paper_crypto.quote) (current : Paper_crypto.quote) =
   match broker_state () with

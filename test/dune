@@ -14,6 +14,11 @@
  (libraries paper_market unix))
 
 (test
+ (name test_btc_quote_clock)
+ (modules test_btc_quote_clock)
+ (libraries paper_market unix))
+
+(test
  (name test_pattern_forge)
  (modules test_pattern_forge)
  (libraries paper_market))

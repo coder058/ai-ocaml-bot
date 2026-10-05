@@ -188,6 +188,38 @@ class DecisionHistoryTests(unittest.TestCase):
         self.assertEqual(history["one"]["trigger_move_bps"], "10.00000000")
         self.assertNotIn("other", str(history))
 
+    def test_btc_preflight_is_exact_prior_and_whitelisted_never_nearest_or_future(self):
+        # SOURCE: synthetic microsecond/nanosecond clocks and explicit checks;
+        # no broker event or risk pass is inferred from a current chart.
+        quote="2026-10-05T02:00:00.123456789Z"
+        client="jsbotbtcbuy20261005T020000123456789Z"
+        order={"id":"exact","clientOrderId":client,"symbol":"BTC/USD","side":"buy",
+            "submittedAt":"2026-10-05T02:00:01.100000000Z"}
+        decision={"at":"2026-10-05T02:00:00.200000Z","message":f"HOT_DECISION quote_time={quote} policy=quote_cross_30s_v1"}
+        checks={"accountReady":True,"pendingIntentClear":True,"openOrdersClear":True,"ownershipMarkerConsistent":True,
+            "buyingPowerCheck":"passed","exposureCheck":"passed","requestedQty":"0.001",
+            "limitPrice":"100000","sourceQuoteTime":quote,"sourceQuoteAgeNs":"776543211",
+            "receiptQuoteAgeNs":"700000000","privateKey":"PRIVATE"}
+        def event(values=checks,at="2026-10-05T02:00:00.900000Z",id=client,side="buy"):
+            return {"at":at,"message":f"BTC_PREFLIGHT id={id} side={side} evidence="+json.dumps(values,separators=(',',':'))}
+        result=decision_history([decision,event()],[order])["exact"]
+        self.assertEqual(result["preflight_observed_at"],"2026-10-05T02:00:00.900000Z")
+        self.assertTrue(json.loads(result["preflight_evidence"])["pendingIntentClear"])
+        self.assertNotIn("PRIVATE",json.dumps(result))
+        invalid=[event(at="2026-10-05T02:00:01.100000001Z"),event(at="2026-10-05T02:00:00.100000Z"),
+            event(id="unrelated"),event(side="sell"),event({**checks,"accountReady":False}),
+            event({**checks,"requestedQty":"NaN"}),event({**checks,"sourceQuoteAgeNs":"5000000001"}),
+            event({**checks,"sourceQuoteTime":"2026-10-05T02:00:00.123456790Z"})]
+        for row in invalid:
+            with self.subTest(row=row):self.assertNotIn("preflight_evidence",decision_history([decision,row],[order])["exact"])
+        # Same exact retained event is safe to deduplicate; conflicting dates
+        # cannot be silently resolved by choosing the last retained event.
+        self.assertIn("preflight_evidence",decision_history([decision,event(),event()],[order])["exact"])
+        self.assertNotIn("preflight_evidence",decision_history([decision,event(),event(at="2026-10-05T02:00:00.950000Z")],[order])["exact"])
+        self.assertNotIn("preflight_evidence",decision_history([decision,event()],[{**order,"symbol":"AAPL"}])["exact"])
+        for malformed in ([],None,"invalid shape"):
+            self.assertNotIn("preflight_evidence",decision_history([decision,event(malformed)],[order])["exact"])
+
 
 class PublicProjectionTests(unittest.TestCase):
     def test_public_positions_exclude_non_bot_holdings(self) -> None:
@@ -212,6 +244,9 @@ class PublicProjectionTests(unittest.TestCase):
         self.assertTrue(complete)
         self.assertFalse(crypto_attributable)
         self.assertEqual({order["id"] for order in orders}, {"bot", "manual-btc"})
+        self.assertIsNone(orders[0]["requestedQty"])
+        self.assertIsNone(orders[0]["requestedNotional"])
+        self.assertIsNone(orders[0]["limitPrice"])
 
     def test_non_bot_crypto_order_blocks_fee_attribution(self) -> None:
         broker_page = [
