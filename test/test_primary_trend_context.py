@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research"))
-from primary_trend_context import summarize, fetch_native, collect, expected_periods, instant, ema
+from primary_trend_context import summarize, fetch_native, collect, expected_periods, instant, ema, month_start, period_end, INTERVALS
 
 # SOURCE: artificial price/volume fixtures solely exercise invariants.
 def row(at, close=100):
@@ -14,6 +14,40 @@ def row(at, close=100):
 
 
 class PrimaryTests(unittest.TestCase):
+    def test_monthly_calendar_leap_year_dst_and_open_month_withheld(self):
+        start=instant("2024-01-01T05:00:00Z");now=instant("2024-04-15T12:00:00Z")
+        calendar=[{"date":"2024-01-02"},{"date":"2024-02-01"},{"date":"2024-03-01"},{"date":"2024-04-01"}]
+        data=[row("2024-01-01T05:00:00Z"),row("2024-02-01T05:00:00Z"),row("2024-03-01T05:00:00Z"),row("2024-04-01T04:00:00Z")]
+        result=summarize(data,"1Month",start,now,True,calendar)
+        self.assertEqual(result['closedBars'],3)
+        self.assertEqual(result['lastBarClosedAt'],"2024-04-01T04:00:00Z")
+        self.assertEqual(result['lastBarAt'],"2024-03-01T05:00:00Z")
+        self.assertEqual(period_end(instant("2024-02-01T00:00:00Z"),"1Month"),instant("2024-03-01T00:00:00Z"))
+        self.assertEqual(month_start(instant("2024-01-31T00:00:00Z"),-1),instant("2023-12-01T00:00:00Z"))
+        self.assertFalse(result['orderAuthority']);self.assertIsNone(result['winProbability'])
+
+    def test_missing_month_resets_warmup_and_latest_month_is_not_fabricated(self):
+        start=instant("2024-01-01T00:00:00Z");now=instant("2024-05-01T00:00:00Z")
+        data=[row("2024-01-01T00:00:00Z"),row("2024-03-01T00:00:00Z")]
+        result=summarize(data,"1Month",start,now,False,[])
+        self.assertEqual(result['contiguousBars'],1);self.assertEqual(result['status'],'stale')
+        self.assertIsNone(result['trend']);self.assertIsNone(result['ema50'])
+        for invalid in ([row("2024-02-02T00:00:00Z")],[row("2024-02-01T12:00:00Z")],[{**row("2024-02-01T00:00:00Z"),'v':True}]):
+            with self.assertRaises(ValueError):summarize(invalid,"1Month",start,now,False,[])
+
+    def test_monthly_adjustment_is_explicit_and_old_cache_does_not_hide_new_interval(self):
+        start=instant("2022-06-01T04:00:00Z");now=instant("2026-10-05T00:00:00Z")
+        request=Mock(return_value={'bars':{'QQQ':[]}})
+        fetch_native(request,'https://known.example/bars',['QQQ'],'1Month',start,now,{},True)
+        self.assertIn('adjustment=split',request.call_args.args[0]);self.assertIn('feed=iex',request.call_args.args[0])
+        scope={'Alpaca equities':['QQQ']}
+        previous={'retrievedAt':now.isoformat(),'scope':scope,'orderAuthority':False,'winProbability':None}
+        result=collect(request,Mock(return_value=[]),'stock','crypto',scope,{},now,previous)
+        self.assertEqual(result['intervals'],list(INTERVALS))
+        monthly=result['markets']['Alpaca equities|QQQ']['frames']['1Month']
+        self.assertEqual(monthly['adjustment'],'split_as_retrieved')
+        self.assertEqual(monthly['knowledge'],'historical_as_retrieved_not_point_in_time')
+        self.assertFalse(monthly['orderAuthority'])
     def test_daily_midnight_uses_new_york_calendar_and_dst_not_fixed_utc_duration(self):
         start=instant("2026-03-06T05:00:00Z"); now=instant("2026-03-10T12:00:00Z")
         calendar=[{"date":"2026-03-06"},{"date":"2026-03-09"},{"date":"2026-03-10"}]
@@ -66,13 +100,13 @@ class PrimaryTests(unittest.TestCase):
         self.assertEqual(result["status"],"descriptive");self.assertEqual(result["trend"],"rising")
         self.assertFalse(result["orderAuthority"]);self.assertIsNone(result["winProbability"])
         scope={"Alpaca crypto":["BTC/USD"],"Hyperliquid HIP-3":["xyz:EUR"]}
-        previous={"retrievedAt":now.isoformat(),"scope":{"Alpaca crypto":["BTC/USD"]},"orderAuthority":False,"winProbability":None}
+        previous={"retrievedAt":now.isoformat(),"scope":{"Alpaca crypto":["BTC/USD"]},"orderAuthority":False,"winProbability":None,"intervals":list(INTERVALS)}
         request=Mock(return_value={"bars":{}})
         self.assertIs(collect(request,Mock(),"stock","crypto",scope,{},now,previous),previous)
         request.assert_not_called()
         future={**previous,"retrievedAt":(now+timedelta(days=1)).isoformat()}
         collect(request,Mock(),"stock","crypto",scope,{},now,future)
-        self.assertEqual(request.call_count,2)
+        self.assertEqual(request.call_count,3)
         with self.assertRaises(ValueError):collect(request,Mock(),"stock","crypto",{"Alpaca equities":["AAPL"]},{},now)
         with self.assertRaises(ValueError):collect(request,Mock(),"stock","crypto",{"Alpaca crypto":["DOGE/USD"]},{},now)
 

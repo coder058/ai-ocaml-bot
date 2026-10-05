@@ -153,12 +153,15 @@ identity/quantity before reconciliation and retains factual pre-submit checks
 for new orders. Unknown historical facts stay unavailable. This hardens the
 existing paper demonstration; it does not establish a profitable strategy.
 
-[Native daily/weekly context](docs/PRIMARY-TREND-CONTEXT.md) augments the five
+[Native daily/weekly/monthly context](docs/PRIMARY-TREND-CONTEXT.md) augments the five
 intraday Murphy panels for monitored Alpaca instruments. Public HIP-3
 instruments now retain their own actual daily/weekly data and native
 Thursday weekly grid. All 19 HIP-3 contexts were retrieved by 01:23 UTC on
-5 October; 18 weekly series still lacked EMA50 warmup. Monthly history remains
-incomplete; this descriptive context cannot authorize orders.
+5 October; 18 weekly series still lacked EMA50 warmup. Alpaca now supplies
+native monthly context; equity monthly prices are split-adjusted as retrieved,
+with their adjustment and receipt shown separately from raw daily/weekly
+history. HIP-3 monthly history remains unavailable; this descriptive context
+cannot authorize orders.
 
 The 19 HIP-3 instruments also show current public open interest, funding,
 provider day volume and mark/oracle prices with actual receipt times. These are

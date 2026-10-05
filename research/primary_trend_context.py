@@ -1,4 +1,4 @@
-"""Native daily/weekly context, descriptive only; no orders or winning probability.
+"""Native daily/weekly/monthly context; no orders or winning probability.
 
 Historical bars are known only at retrieval, not point-in-time backtest inputs.
 Provider references: https://docs.alpaca.markets/us/reference/stockbars and
@@ -12,11 +12,13 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 # SOURCE: provider native aggregation names; never derive these from 4h candles.
-INTERVALS = ("1Day", "1Week")
+INTERVALS = ("1Day", "1Week", "1Month")
 # SOURCE: existing shared OCaml Pattern Forge EMA windows.
 EMA_WINDOWS = (20, 50)
 # SOURCE: EMA50 plus a preceding observation and one leading period allowance.
 HISTORY_WEEKS = max(EMA_WINDOWS) + 2
+# SOURCE: the same EMA50 plus previous/leading-period allowance, in native months.
+HISTORY_MONTHS = max(EMA_WINDOWS) + 2
 # GUESS: # UNCALIBRATED GUESS — an hourly read-only refresh limits REST work;
 # measure coverage/latency before changing this operational cadence.
 REFRESH_SECONDS = 60 * 60
@@ -40,9 +42,21 @@ def start_of_week(day):
     return day - timedelta(days=day.weekday())
 
 
+def month_start(at, offset=0):
+    # SOURCE: twelve calendar months per year; never approximate a month by days.
+    index = at.year * 12 + at.month - 1 + offset
+    year, zero_based_month = divmod(index, 12)
+    return at.replace(year=year, month=zero_based_month + 1, day=1,
+                      hour=0, minute=0, second=0, microsecond=0)
+
+
 def period_end(start, interval):
     # SOURCE: calendar-date arithmetic preserves NY midnight across DST. A
     # stock daily bar can include after-hours prints; do not close it at 16:00.
+    if interval == "1Month":
+        return month_start(start, 1)
+    if interval not in ("1Day", "1Week"):
+        raise ValueError("unsupported primary interval")
     return start + timedelta(days=1 if interval == "1Day" else 7)
 
 
@@ -61,6 +75,8 @@ def expected_periods(start, as_of, interval, equities, calendar):
             day += timedelta(days=1)
     if interval == "1Week":
         dates = {start_of_week(day) for day in dates}
+    elif interval == "1Month":
+        dates = {day.replace(day=1) for day in dates}
     return [at for day in sorted(dates)
             if (at := datetime.combine(day, datetime.min.time(), zone)) >= start
             and period_end(at, interval) <= as_of]
@@ -88,8 +104,11 @@ def summarize(rows, interval, start, as_of, equities, calendar):
     tail, previous, closed_count = [], None, 0
     for row in rows:
         at = instant(row["t"]).astimezone(zone)
-        if at.time() != datetime.min.time() or interval == "1Week" and at.weekday() != 0:
-            raise ValueError("native daily/weekly timestamp is not period-aligned")
+        if (at.time() != datetime.min.time() or interval == "1Week" and at.weekday() != 0
+                or interval == "1Month" and at.day != 1):
+            raise ValueError("native primary timestamp is not period-aligned")
+        if any(isinstance(row[key], bool) for key in ("o", "h", "l", "c", "v")):
+            raise ValueError("boolean native OHLCV")
         values = [float(row[key]) for key in ("o", "h", "l", "c", "v")]
         op, hi, lo, close, volume = values
         if not all(math.isfinite(n) for n in values) or not 0 < lo <= min(op, close) <= max(op, close) <= hi or volume < 0:
@@ -118,7 +137,8 @@ def summarize(rows, interval, start, as_of, equities, calendar):
             "lastBarClosedAt": utc(period_end(previous, interval)) if previous else None,
             "expectedLatestBarAt": utc(latest_expected) if latest_expected else None,
             "close": tail[-1] if tail else None, "ema20": fast, "ema50": slow,
-            "trend": trend, "closure": "next native midnight / Monday midnight; conservative weekly boundary",
+            "trend": trend, "closure": ("next calendar month at native midnight; open month withheld"
+                if interval == "1Month" else "next native midnight / Monday midnight; conservative weekly boundary"),
             "orderAuthority": False, "winProbability": None}
 
 
@@ -126,7 +146,10 @@ def fetch_native(request, url, symbols, interval, start, as_of, credentials, equ
     query = {"symbols": ",".join(symbols), "timeframe": interval,
              "start": utc(start), "end": utc(as_of), "sort": "asc", "limit": PAGE_LIMIT}
     if equities:
-        query.update({"feed": "iex", "adjustment": "raw"})
+        # SOURCE: official Alpaca split adjustment changes historical prices and
+        # volume. Monthly context is explicitly as-retrieved, never PIT evidence;
+        # retain existing raw daily/weekly data rather than silently replacing it.
+        query.update({"feed": "iex", "adjustment": "split" if interval == "1Month" else "raw"})
     result, tokens = {symbol: [] for symbol in symbols}, set()
     while True:
         payload = request(url + "?" + urllib.parse.urlencode(query), credentials)
@@ -152,7 +175,7 @@ def collect(request, paper_get, stock_url, crypto_url, universes, credentials, a
     if previous and previous.get("orderAuthority") is False and previous.get("winProbability") is None:
         age = (as_of - instant(previous["retrievedAt"])).total_seconds()
         same_scope = previous.get("scope") == {v: list(s) for v, s in universes.items() if v.startswith("Alpaca")}
-        if 0 <= age < REFRESH_SECONDS and same_scope:
+        if 0 <= age < REFRESH_SECONDS and same_scope and previous.get("intervals") == list(INTERVALS):
             return previous
     markets, errors = {}, []
     scope = {v: list(s) for v, s in universes.items() if v.startswith("Alpaca")}
@@ -161,30 +184,38 @@ def collect(request, paper_get, stock_url, crypto_url, universes, credentials, a
         zone = NEW_YORK if equities else timezone.utc
         monday = start_of_week(as_of.astimezone(zone).date())
         start = datetime.combine(monday - timedelta(weeks=HISTORY_WEEKS), datetime.min.time(), zone)
+        monthly_start = month_start(as_of.astimezone(zone), -HISTORY_MONTHS)
         calendar = []
         try:
             if equities:
-                params = {"start": start.date().isoformat(), "end": as_of.astimezone(zone).date().isoformat()}
+                params = {"start": monthly_start.date().isoformat(), "end": as_of.astimezone(zone).date().isoformat()}
                 calendar = paper_get("/v2/calendar?" + urllib.parse.urlencode(params), credentials)
                 if not isinstance(calendar, list):
                     raise ValueError("primary context calendar missing")
             for interval in INTERVALS:
                 try:
+                    interval_start = monthly_start if interval == "1Month" else start
                     rows = fetch_native(request, stock_url if equities else crypto_url, symbols,
-                                        interval, start, as_of, credentials, equities)
+                                        interval, interval_start, as_of, credentials, equities)
+                    received_at = utc(datetime.now(timezone.utc))
                     for symbol in symbols:
                         key = venue + "|" + symbol
-                        entry = markets.setdefault(key, {"source": "Alpaca IEX raw" if equities else "Alpaca crypto US",
+                        entry = markets.setdefault(key, {"source": "Alpaca IEX (per-frame adjustment shown)" if equities else "Alpaca crypto US",
                             "knowledge": "historical_as_retrieved_not_point_in_time", "frames": {},
                             "orderAuthority": False, "winProbability": None})
                         try:
-                            entry["frames"][interval] = summarize(rows[symbol], interval, start, as_of, equities, calendar)
+                            reading = summarize(rows[symbol], interval, interval_start, as_of, equities, calendar)
+                            reading.update({"retrievedAt": received_at, "asOf": utc(as_of),
+                                "source": "Alpaca IEX" if equities else "Alpaca crypto US",
+                                "adjustment": ("split_as_retrieved" if interval == "1Month" else "raw") if equities else "not_applicable",
+                                "knowledge": "historical_as_retrieved_not_point_in_time"})
+                            entry["frames"][interval] = reading
                         except (ValueError, KeyError, TypeError) as error:
                             entry["frames"][interval] = {"status": "invalid", "reason": type(error).__name__, "orderAuthority": False, "winProbability": None}
                 except Exception as error:
                     errors.append({"venue": venue, "interval": interval, "error": type(error).__name__})
         except Exception as error:
             errors.append({"venue": venue, "error": type(error).__name__})
-    return {"asOf": utc(as_of), "retrievedAt": utc(datetime.now(timezone.utc)), "scope": scope,
+    return {"asOf": utc(as_of), "retrievedAt": utc(datetime.now(timezone.utc)), "scope": scope, "intervals": list(INTERVALS),
             "markets": markets, "errors": errors, "orderAuthority": False, "winProbability": None,
-            "missing": "Monthly history and primary context outside Alpaca remain unavailable"}
+            "missing": "Daily/weekly equities remain raw; monthly equities are split-adjusted as retrieved. No PIT corporate-action history, full Murphy confirmation or trade authority."}

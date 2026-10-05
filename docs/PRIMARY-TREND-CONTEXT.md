@@ -1,11 +1,12 @@
-# Native daily and weekly context
+# Native daily, weekly and monthly context
 
-The minute scanner now also retrieves native `1Day` and `1Week` bars for the
+The minute scanner now also retrieves native `1Day`, `1Week` and `1Month` bars for the
 actually monitored Alpaca stocks/ETF and BTC/ETH/SOL. It attaches the same
 instrument's primary context to each of its five intraday Murphy panels.
 These are additional time scales, not additional broker products or orders.
-Hyperliquid primary history is not connected by this module. Monthly history
-is still missing, so Murphy law 1 remains **partial**.
+Hyperliquid daily/weekly history uses its separate public adapter; monthly
+HIP-3 history remains unavailable. Murphy law 1 remains **partial**: context
+availability alone does not complete trend confirmation or book methodology.
 
 ## Data and causality
 
@@ -13,8 +14,12 @@ is still missing, so Murphy law 1 remains **partial**.
   and [crypto bars](https://docs.alpaca.markets/us/reference/cryptobars-1).
   Pagination follows every returned token and rejects repeated tokens or
   unexpected instruments. The 10,000 limit applies to the total page.
-- Equities use the IEX feed and raw adjustment; these are not consolidated
-  volumes or prices adjusted for corporate actions. Crypto uses the US feed.
+- Equities use IEX, with existing raw daily/weekly adjustment retained. Monthly
+  prices/volume use the documented `split` adjustment, explicitly known only
+  at this retrieval. This is not a point-in-time corporate-action history,
+  a dividend-adjusted total return or consolidated volume. Every frame shows
+  its own adjustment and receipt; raw and adjusted histories are not silently
+  compared as one scale. Crypto uses the US feed.
 - Stock periods begin at New York midnight; crypto periods at UTC midnight.
   Calendar-date arithmetic handles New York DST. Missing stock days are
   compared against the actual broker calendar; missing periods reset warmup.
@@ -24,6 +29,11 @@ is still missing, so Murphy law 1 remains **partial**.
   include other prints. Weekly closure conservatively waits until the next
   Monday midnight. On Sunday, the latest week can therefore still be withheld.
   The UI displays actual last-bar and closure timestamps.
+- Monthly periods start on the first calendar day at native midnight and
+  close at the following month's native midnight. New York DST, leap years,
+  year rollover and varying month lengths use calendar arithmetic, never a
+  fixed 30-day duration. A month can begin on a holiday/weekend while containing
+  actual broker sessions; missing whole months reset indicator warmup.
 - History is **as retrieved**, with actual retrieval time. It is not a
   point-in-time backtest. Subsequent forward journal records retain the context
   actually observed then; no earlier record is retroactively enriched.
@@ -60,3 +70,19 @@ individual observations, not guaranteed throughput or HFT latency.
 
 No execution policy was enabled by this context. It supplies no validated
 edge, calibrated winning probability or evidence of live profitability.
+
+## Monthly verification — 5 October 05:23 UTC
+
+Read-only native `1Month` probes for QQQ/NVDA and BTC returned 53 periods,
+including the open October period, at 02:46:58–59 UTC. The production collector
+withholds that open month and obtains actual 52-month history for EMA50 rather
+than inventing monthly candles from intraday data. Nine calendar/native tests
+passed locally and on Dublin, seven HIP-3 adapter regressions, eight pipeline
+and nine Murphy tests on Dublin; 40 frontend tests and production build passed.
+
+Actual cached retrieval 04:52:13–23 UTC: 72 monthly summaries, 71 descriptive
+and SOL warming. QQQ/NVDA/BTC had 52 consecutive closed periods. QQQ's last
+monthly start/closure were 2026-09-01T04:00:00Z / 2026-10-01T04:00:00Z; October
+was withheld. Browser QQQ 1h showed actual EMA20/50, receipt and split adjustment
+beside separately identified raw daily/weekly context. This is descriptive
+as-retrieved information, not validation of a trading policy.

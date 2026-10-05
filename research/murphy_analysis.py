@@ -298,7 +298,7 @@ def enrich(result, requested, frame_minutes):
             suite["murphy"] = [
                 law(1, "partial", {"frames": aligned,
                     "primaryContext": original.get("primaryContext", {"missing": "Native daily/weekly/monthly history unavailable"}),
-                    "missing": "Monthly history; native daily/weekly context can also be unavailable or warming"}),
+                    "missing": "Native history coverage varies by provider; multi-scale confirmation and point-in-time corporate-action lineage remain incomplete"}),
                 law(2, "warming" if reading.get("trend") == "warming" else available, {"trend": reading.get("trend"), "structure": reading.get("structure")}),
                 law(3, available if geometry_values.get("support") is not None or geometry_values.get("resistance") is not None else "waiting_swings",
                     {"support": geometry_values.get("support"), "resistance": geometry_values.get("resistance")}),

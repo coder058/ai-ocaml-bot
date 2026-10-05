@@ -145,10 +145,10 @@ function PrimaryContextEvidence({ value }: { value: unknown }) {
   const context = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const frames = context.frames && typeof context.frames === "object" ? context.frames as Record<string, Record<string, unknown>> : {};
   return <div className="primary-context">
-    <p><strong>Native daily / weekly context</strong><br />{evidenceText(context.source)} · received {evidenceText(context.retrievedAt)}</p>
-    <div className="primary-context-frames">{["1Day", "1Week"].map(frame => {
+    <p><strong>Native daily / weekly / monthly context</strong><br />{evidenceText(context.source)} · received {evidenceText(context.retrievedAt)}</p>
+    <div className="primary-context-frames">{["1Day", "1Week", "1Month"].map(frame => {
       const reading = frames[frame] ?? {};
-      return <article key={frame}><header><strong>{frame === "1Day" ? "Daily" : "Weekly"}</strong><span>{evidenceText(reading.status)}</span></header>
+      return <article key={frame}><header><strong>{frame === "1Day" ? "Daily" : frame === "1Week" ? "Weekly" : "Monthly"}</strong><span>{evidenceText(reading.status ?? "unavailable")}</span></header>
         <dl><div><dt>Trend</dt><dd>{evidenceText(reading.trend)}</dd></div>
           <div><dt>Closed / consecutive bars</dt><dd>{evidenceText(reading.closedBars)} / {evidenceText(reading.contiguousBars)}</dd></div>
           <div><dt>EMA20 / EMA50</dt><dd>{evidenceText(reading.ema20)} / {evidenceText(reading.ema50)}</dd></div>
@@ -156,10 +156,11 @@ function PrimaryContextEvidence({ value }: { value: unknown }) {
           <div><dt>Bar closed at</dt><dd>{evidenceText(reading.lastBarClosedAt)}</dd></div>
           <div><dt>Expected latest closed bar</dt><dd>{evidenceText(reading.expectedLatestBarAt)}</dd></div></dl>
         <p>{evidenceText(reading.closure)}</p>
+        {reading.source != null && <p>{evidenceText(reading.source)} · adjustment: {evidenceText(reading.adjustment)}</p>}
         {reading.retrievedAt != null && <p>Received {evidenceText(reading.retrievedAt)} · as of {evidenceText(reading.asOf)}</p>}
       </article>;
     })}</div>
-    <p className="analysis-limit">Historical data as retrieved, not a point-in-time backtest. Each provider's native period boundary is shown above; an open daily/weekly candle is withheld. No trade authority or win probability.</p>
+    <p className="analysis-limit">Historical data as retrieved, not a point-in-time backtest. Each provider's native period boundary is shown above; open periods are withheld. Monthly equity prices are split-adjusted as retrieved, while daily/weekly remain raw. No retrospective corporate-action knowledge, trade authority or win probability.</p>
     <p>{evidenceText(context.missing)}</p>
     {Array.isArray(context.errors) && context.errors.length > 0 && <p>Retrieval errors: {evidenceText(context.errors)}</p>}
   </div>;
@@ -191,7 +192,7 @@ function Evidence({ suite, pipeline }: { suite: TechnicalSuite | undefined; pipe
       {law.law === 1 && <PrimaryContextEvidence value={law.evidence.primaryContext} />}
       {law.law === 10 && law.evidence.currentDerivativeContext != null && <DerivativeContextEvidence value={law.evidence.currentDerivativeContext} />}
       <dl>{Object.entries(law.evidence).filter(([key]) => key !== "primaryContext" && key !== "currentDerivativeContext").map(([key, value]) => <div key={key}><dt>{key === key.toUpperCase() ? key.replaceAll("_", " ") : key.replace(/([a-z])([A-Z])/g, "$1 $2")}</dt><dd>{evidenceText(value)}</dd></div>)}</dl>
-    </article>)}<p className="analysis-limit">Descriptive checklist. Swing divergences are exploratory warnings, not trade probabilities. Monthly context, missing or warming native histories and consolidated volume/open interest remain incomplete.</p></div>}
+    </article>)}<p className="analysis-limit">Descriptive checklist. Swing divergences are exploratory warnings, not trade probabilities. Native history coverage varies by provider; missing or warming histories and historical volume/open-interest confirmation remain incomplete.</p></div>}
     {tab === "Candlesticks" && <><label className="pattern-toggle"><input type="checkbox" checked={allPatterns} onChange={e => setAllPatterns(e.target.checked)} /> Show every catalog pattern</label>
       <p>TA-Lib signed pattern codes are detections, not confidence or win probabilities.</p>
       <div className="pattern-list">{catalog?.patternCatalog.filter(p => allPatterns || !!suite.patterns[p.code]?.value).map(p => {
