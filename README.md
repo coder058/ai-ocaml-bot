@@ -17,6 +17,12 @@ and unrelated account holdings stay private. The retained accounting code subtra
 fees and use broker marks; they stay provisional until daily fee posting,
 quantities and closed-lot reconciliation are complete.
 
+The new dated cohort also shows gross FIFO matched exits, with entry and exit
+requests both inside that cohort. Carry-in exits and open holdings are separate;
+partial exits are not independent round trips. Net cohort P&L stays unavailable
+until posted fees have an exact cohort/lot allocation. Gross paper results do
+not establish live profitability.
+
 A second, read-only collector records public Hyperliquid HIP-3 prices, BBOs and
 1m candle updates for selected FX-like, index, energy and equity contracts.
 It cannot access a wallet or submit orders. Its capture and restart behavior

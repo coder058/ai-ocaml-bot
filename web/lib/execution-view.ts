@@ -1,6 +1,7 @@
 import type { FrameName, PaperTelemetry } from "./telemetry";
 import type { ChartFrame } from "./chart-types";
 import { botFills, botOrders, marketSymbol, orderDisplayStatus, orderFillSummary, reasonForOrder } from "./bot-view.ts";
+import { tradeLedger } from "./trade-ledger.ts";
 
 // SOURCE: actual clock at the start of the user's new execution-trace work.
 // The previous history reset remains intact; this is a separate, dated cohort.
@@ -163,6 +164,28 @@ function newOrders(t: PaperTelemetry, now: number) {
   });
 }
 
+export function cohortAccounting(t: PaperTelemetry, now = Date.now()) {
+  const unavailable = (reason: string) => ({available:false,reason,grossRealized:null as number|null,
+    matchedExitGroups:null as number|null,carryInExitGroups:null as number|null,netRealized:null});
+  if (!Number.isFinite(Date.parse(t.generatedAt)) || Date.parse(t.generatedAt)>now ||
+      botFills(t).some(fill=>!fill.transactionTime || !Number.isFinite(Date.parse(fill.transactionTime)) || Date.parse(fill.transactionTime)>now))
+    return unavailable("Broker snapshot or fill clocks are missing, invalid or future-dated.");
+  const ledger=tradeLedger(t);
+  if (!ledger.available) return unavailable(ledger.reason ?? "Complete owned fill accounting unavailable.");
+  const since=Date.parse(TRACE_START);
+  const cohortIds=new Set(botOrders(t).filter(order=>Number.isFinite(Date.parse(order.submittedAt ?? "")) &&
+    Date.parse(order.submittedAt!)>=since && Date.parse(order.submittedAt!)<=now &&
+    (order.clientOrderId.startsWith("aibotstk") || allowed(order.symbol))).map(order=>order.id));
+  const exits=ledger.closed.filter(row=>cohortIds.has(row.exitOrderId) && Date.parse(row.exitAt)>=since && Date.parse(row.exitAt)<=now);
+  const closed=exits.filter(row=>cohortIds.has(row.entryOrderId) && Date.parse(row.entryAt)>=since && Date.parse(row.entryAt)<=now);
+  return {available:true,reason:null,grossRealized:closed.reduce((sum,row)=>sum+row.grossPnl,0),
+    matchedExitGroups:closed.length,carryInExitGroups:exits.length-closed.length,
+    // SOURCE: exported posted fees are aggregate history, not allocated to
+    // this dated cohort or its closed lots. Never subtract all historical
+    // fees or a guessed fraction to invent a net cohort result.
+    netRealized:null};
+}
+
 export function executionView(t: PaperTelemetry | null, now = Date.now()) {
   if (!t) return null;
   const rows = (t.marketPipeline?.markets ?? []).filter(m => m.symbol !== "AAPL").flatMap(m => TRACE_FRAMES.map(frame => rowFor(t, m, frame, now)));
@@ -179,6 +202,7 @@ export function executionView(t: PaperTelemetry | null, now = Date.now()) {
        missingExitQuotes:count(audit.rejected?.noTimelyFreshExitReference)?audit.rejected.noTimelyFreshExitReference:null} : null;
   return { generatedAt: t.generatedAt, analysisAsOf: t.marketPipeline?.asOf ?? null, retrievedAt: t.marketPipeline?.retrievedAt ?? null,
     traceStart: TRACE_START, orderAuthority: false as const, winProbability: null,
+    cohortAccounting:cohortAccounting(t,now),
     symbols: new Set(rows.map(r => `${r.venue}|${r.symbol}`)).size, frames: rows.length,
     candidates: rows.filter(r => r.candidate).length, dataCounts: counts("dataState"), routeCounts: counts("route"),
     fx: t.connections?.fx ? { connected: t.connections.fx.connected, reason: t.connections.fx.reason, executionAdapterAvailable: t.connections.fx.executionAdapterAvailable } : null,
