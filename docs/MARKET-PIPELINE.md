@@ -107,3 +107,31 @@ Sources: [Alpaca native crypto bars](https://docs.alpaca.markets/us/reference/cr
 [Alpaca trading-account market support](https://docs.alpaca.markets/us/docs/account-plans),
 [Hyperliquid public API limits](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/rate-limits-and-user-limits),
 [Hyperliquid HIP-3 contracts](https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-3-builder-deployed-perpetuals).
+
+## Public native HIP-3 primary context
+
+`research/hip3_primary_context.py` collects real native `1d`/`1w` candles via
+the existing budgeted public info transport inside the serialized scanner.
+It does not construct weekly bars from intraday data or submit orders.
+One instrument (two requests) per scan seeds the active catalog gradually;
+this cadence and the inherited hourly refresh are **uncalibrated operational
+choices**, not a prediction or latency guarantee. Failed attempts move behind
+unattempted instruments and preserve successful frames' original receipt times.
+Per-frame as-of/receipt/error evidence remains visible.
+
+Actual `xyz:EUR` and `xyz:XYZ100` weekly responses checked on 5 October have
+Thursday 00:00 UTC starts and inclusive ends immediately before the next
+Thursday. The adapter validates the Unix epoch grid, duration, symbol, interval,
+OHLCV, increasing periods and missing-latest/gap conditions. This observed
+provider grid differs from Alpaca's Monday weekly boundary. Open bars are
+withheld until their actual next native boundary. A changed provider grid
+fails validation rather than being silently relabeled.
+
+First production EUR context received at 01:05:28 UTC: 286 consecutive closed
+daily bars, but only 41 closed weekly bars. Daily EMA context was descriptive;
+weekly EMA50 remained unavailable/warming. JPY at 01:06:15 likewise had 286
+daily / 41 weekly bars. Do not claim all 19 HIP-3 primary contexts are seeded
+from these first two receipts. Monthly history, full Murphy methodology and
+execution/spot-FX adapters remain incomplete; these contracts are perpetuals.
+
+Source: [Hyperliquid native candle API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint).

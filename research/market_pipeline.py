@@ -24,6 +24,7 @@ from hyperliquid_capture import COINS
 from stream_capture import credentials as stream_credentials
 from murphy_analysis import enrich, required_seed_bars, forward_reading
 from primary_trend_context import collect as collect_primary_context
+from hip3_primary_context import collect as collect_hip3_primary_context
 from decision_quote_capture import collect as collect_decision_quotes
 
 # SOURCE: requested timeframes and official Alpaca / Hyperliquid interval names.
@@ -67,6 +68,9 @@ TIMEOUT_SECONDS = 30
 HL_WEIGHT_PER_MINUTE = 1_200
 HL_BASE_WEIGHT = 20
 HL_ROWS_PER_WEIGHT = 60
+# SOURCE: Hyperliquid candleSnapshot supports native daily/weekly bars. Keep
+# transport durations separate from the user's five analyzed intraday frames.
+HL_NATIVE_MINUTES = {name:minutes for name,(minutes,_) in FRAMES.items()} | {"1d":24*60,"1w":7*24*60}
 # SOURCE: Alpaca documents a maximum of 10,000 total bars per response page.
 ALPACA_PAGE_LIMIT = 10_000
 # SOURCE: US stock exchange calendar sessions are expressed in New York time.
@@ -127,7 +131,7 @@ def request(url: str, credentials: dict | None = None, body: dict | None = None)
         weight = HL_BASE_WEIGHT
         if body and body.get("type") == "candleSnapshot":
             req = body["req"]
-            duration = FRAMES[req["interval"]][0] * 60_000
+            duration = HL_NATIVE_MINUTES[req["interval"]] * 60_000
             maximum_rows = math.ceil((req["endTime"] - req["startTime"]) / duration) + 1
             weight += math.ceil(maximum_rows / HL_ROWS_PER_WEIGHT)
         HL_BUDGET.acquire(weight)
@@ -399,6 +403,12 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
         # data/OMS path or silently present an old context as newly retrieved.
         errors.append({"stage": "primary_context", "error": type(error).__name__})
     primary_context = cache.get("primaryContext", {})
+    try:
+        cache["hip3PrimaryContext"] = collect_hip3_primary_context(request, universes,
+            datetime.now(timezone.utc), cache.get("hip3PrimaryContext"))
+    except (ValueError, KeyError, TypeError) as error:
+        errors.append({"stage": "hip3_primary_context", "error": type(error).__name__})
+    hip3_primary_context = cache.get("hip3PrimaryContext", {})
     elapsed("native_primary_context")
     final_as_of = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     requested = [{**markets[f"{venue}|{symbol}"],
@@ -409,10 +419,13 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
                  for venue, symbols in universes.items() for symbol in symbols]
     for market in requested:
         key = market["venue"] + "|" + market["symbol"]
-        market["primaryContext"] = {**primary_context.get("markets", {}).get(key, {}),
+        market["primaryContext"] = ({**hip3_primary_context.get("markets", {}).get(market["symbol"], {}),
+            "missing": "Monthly history; public native daily/weekly context seeds one instrument per scan and may be warming.",
+            "orderAuthority": False, "winProbability": None}
+            if market["venue"] == "Hyperliquid HIP-3" else {**primary_context.get("markets", {}).get(key, {}),
             "asOf": primary_context.get("asOf"), "retrievedAt": primary_context.get("retrievedAt"),
             "missing": primary_context.get("missing", "Native primary context unavailable"),
-            "errors": primary_context.get("errors", []), "orderAuthority": False, "winProbability": None}
+            "errors": primary_context.get("errors", []), "orderAuthority": False, "winProbability": None})
     payload = {"asOf": utc(final_as_of), "markets": requested}
     proc = subprocess.run([str(engine)], input=json.dumps(payload).encode(),
                           capture_output=True, timeout=TIMEOUT_SECONDS, check=False)

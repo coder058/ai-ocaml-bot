@@ -323,7 +323,7 @@ def enrich(result, requested, frame_minutes):
         "murphyLaws": list(LAW_NAMES), "source": f"TA-Lib {talib.__version__} C via Python + shared OCaml",
         "displayBars": DISPLAY_BARS, "seedBars": required_seed_bars(), "orderAuthority": False,
         "completeMurphyBook": False,
-        "remaining": ["Monthly primary trends and native primary context outside Alpaca", "Strategy validation and independent momentum-pivot divergences",
+        "remaining": ["Monthly primary trends; incomplete or warming native daily/weekly histories", "Strategy validation and independent momentum-pivot divergences",
             "Full reversal/continuation formation library", "Elliott wave, time-cycle interpretation",
             "Point-and-figure analysis", "Market breadth / intermarket confirmation",
             "Consolidated volume and open interest", "Strategy validation and probabilities"],

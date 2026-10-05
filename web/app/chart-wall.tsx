@@ -155,9 +155,11 @@ function PrimaryContextEvidence({ value }: { value: unknown }) {
           <div><dt>Last actual bar</dt><dd>{evidenceText(reading.lastBarAt)}</dd></div>
           <div><dt>Bar closed at</dt><dd>{evidenceText(reading.lastBarClosedAt)}</dd></div>
           <div><dt>Expected latest closed bar</dt><dd>{evidenceText(reading.expectedLatestBarAt)}</dd></div></dl>
+        <p>{evidenceText(reading.closure)}</p>
+        {reading.retrievedAt != null && <p>Received {evidenceText(reading.retrievedAt)} · as of {evidenceText(reading.asOf)}</p>}
       </article>;
     })}</div>
-    <p className="analysis-limit">Historical data as retrieved, not a point-in-time backtest. Weekly closure waits for the next native Monday midnight; Sunday can still show the prior week. No trade authority or win probability.</p>
+    <p className="analysis-limit">Historical data as retrieved, not a point-in-time backtest. Each provider's native period boundary is shown above; an open daily/weekly candle is withheld. No trade authority or win probability.</p>
     <p>{evidenceText(context.missing)}</p>
     {Array.isArray(context.errors) && context.errors.length > 0 && <p>Retrieval errors: {evidenceText(context.errors)}</p>}
   </div>;
@@ -174,7 +176,7 @@ function Evidence({ suite, pipeline }: { suite: TechnicalSuite | undefined; pipe
       <header><strong>{law.law}. {law.name}</strong><span>{law.status}</span></header>
       {law.law === 1 && <PrimaryContextEvidence value={law.evidence.primaryContext} />}
       <dl>{Object.entries(law.evidence).filter(([key]) => key !== "primaryContext").map(([key, value]) => <div key={key}><dt>{key === key.toUpperCase() ? key.replaceAll("_", " ") : key.replace(/([a-z])([A-Z])/g, "$1 $2")}</dt><dd>{evidenceText(value)}</dd></div>)}</dl>
-    </article>)}<p className="analysis-limit">Descriptive checklist. Swing divergences are exploratory warnings, not trade probabilities. Monthly context, other venues' primary context and consolidated volume/open interest remain incomplete.</p></div>}
+    </article>)}<p className="analysis-limit">Descriptive checklist. Swing divergences are exploratory warnings, not trade probabilities. Monthly context, missing or warming native histories and consolidated volume/open interest remain incomplete.</p></div>}
     {tab === "Candlesticks" && <><label className="pattern-toggle"><input type="checkbox" checked={allPatterns} onChange={e => setAllPatterns(e.target.checked)} /> Show every catalog pattern</label>
       <p>TA-Lib signed pattern codes are detections, not confidence or win probabilities.</p>
       <div className="pattern-list">{catalog?.patternCatalog.filter(p => allPatterns || !!suite.patterns[p.code]?.value).map(p => {

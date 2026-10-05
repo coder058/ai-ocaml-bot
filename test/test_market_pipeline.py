@@ -1,5 +1,6 @@
 """Causality and provider history transport; fixtures are not market results."""
 import sys
+import io
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -7,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research"))
-from market_pipeline import RestBudget, alpaca_bars, merge, normalize, session_slots, relevant_calendar  # noqa: E402
+from market_pipeline import RestBudget, alpaca_bars, merge, normalize, session_slots, relevant_calendar, request, HL_INFO  # noqa: E402
 
 # SOURCE: synthetic UTC minute OHLC fixture for boundary validation.
 ROW = {"t": "2026-10-01T12:00:00Z", "o": 100, "h": 101, "l": 99, "c": 100, "v": 1}
@@ -15,6 +16,18 @@ NOW = datetime(2026, 10, 1, 12, 1, tzinfo=timezone.utc)
 
 
 class PipelineTests(unittest.TestCase):
+    def test_native_primary_requests_use_documented_budget_without_intraday_key_error(self):
+        # SOURCE: synthetic 52-week ranges validate default weight 20 +
+        # ceil(estimated maximum rows / documented 60), no network calls.
+        for interval, expected in (("1w", 21), ("1d", 27)):
+            with patch("market_pipeline.HL_BUDGET.acquire") as acquire, patch("market_pipeline.urllib.request.urlopen", return_value=io.StringIO("[]")) as transport:
+                result = request(HL_INFO, body={"type":"candleSnapshot", "req":{
+                    "coin":"xyz:EUR", "interval":interval, "startTime":0,
+                    "endTime":52*7*24*60*60*1_000}})
+                acquire.assert_called_once_with(expected)
+                transport.assert_called_once()
+                self.assertEqual(result, [])
+
     def test_calendar_window_keeps_session_adjacency_missing_bars_and_latest_expectation(self):
         from murphy_analysis import contiguous
         # SOURCE: synthetic actual-session slots and gaps, not broker observations.
