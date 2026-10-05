@@ -62,6 +62,7 @@ def observation(record):
     return {"venue": record["venue"], "symbol": record["symbol"], "frame": frame,
             "start": start, "observed": observed, "o": op, "c": close,
             "patterns": patterns, "status": reading.get("status"),
+            "observedAtText": record["observedAt"], "quoteReference": reading.get("quoteReference"),
             "source": evidence.get("source") or suite.get("source")}
 
 

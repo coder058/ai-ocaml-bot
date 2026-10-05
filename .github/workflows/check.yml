@@ -35,6 +35,7 @@ jobs:
           python -m unittest discover -s test -p test_market_pipeline.py -v
           python -m unittest discover -s test -p test_primary_trend_context.py -v
           python -m unittest discover -s test -p test_decision_quote_capture.py -v
+          python -m unittest discover -s test -p test_forward_quote_audit.py -v
   monitor:
     runs-on: ubuntu-latest
     defaults:

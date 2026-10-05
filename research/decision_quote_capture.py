@@ -23,6 +23,15 @@ def utc(value):
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def quote_time(value):
+    """Exact RFC3339 decimal seconds, including Alpaca nanoseconds on Python 3.10."""
+    parts = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(Z|[+-]\d\d:\d\d)", value)
+    if not parts:
+        raise ValueError("quote timezone or timestamp precision invalid")
+    base = datetime.fromisoformat(parts[1] + parts[3].replace("Z", "+00:00"))
+    return Decimal(int(base.timestamp())) + Decimal("0." + (parts[2] or "0"))
+
+
 def normalize(raw, received_at, venue, symbol):
     result = {"venue": venue, "symbol": symbol, "receivedAt": utc(received_at),
               "feed": "iex" if venue == "Alpaca equities" else "Alpaca crypto US",
@@ -31,14 +40,10 @@ def normalize(raw, received_at, venue, symbol):
     if raw is None:
         return result
     try:
-        parts = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?(Z|[+-]\d\d:\d\d)", raw["t"])
-        if not parts:
-            raise ValueError("quote timezone missing")
-        base = datetime.fromisoformat(parts[1] + parts[3].replace("Z", "+00:00"))
         # SOURCE: Python 3.10 datetime accepts microseconds, while Alpaca quotes
         # have nanoseconds. Keep the original text and compare exact decimal
         # seconds, including quotes just after the measured reception time.
-        quote_seconds = Decimal(int(base.timestamp())) + Decimal("0." + (parts[2] or "0"))
+        quote_seconds = quote_time(raw["t"])
         # SOURCE: 1,000,000 microseconds per second in datetime's clock value.
         received_seconds = Decimal(int(received_at.replace(microsecond=0).timestamp())) + Decimal(received_at.microsecond) / Decimal(1_000_000)
         bid, ask = float(raw["bp"]), float(raw["ap"])
