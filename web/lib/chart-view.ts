@@ -37,6 +37,7 @@ export function chartView(raw: MarketPipeline | undefined, options: { preview?: 
     marketsAnalyzed: p.marketsAnalyzed, currentCandidates: p.currentCandidates,
     brokerOrderSymbols: p.brokerOrderSymbols, errors: p.errors,
     processingSeconds: p.processingSeconds, technicalCoverage: p.technicalCoverage,
+    incrementalAnalysis: p.incrementalAnalysis,
     markets: p.markets.filter(m => (!options.venue || m.venue === options.venue) && (!options.symbol || m.symbol === options.symbol)).map(m => ({ symbol: m.symbol, venue: m.venue,
       category: m.category, execution: m.execution,
       frames: Object.fromEntries(Object.entries(m.frames).map(([name, r]) => [name, {
@@ -47,6 +48,14 @@ export function chartView(raw: MarketPipeline | undefined, options: { preview?: 
         macdSignal: r.macdSignal, candidate: r.candidate,
         invalidationLevel: r.invalidationLevel, orderAuthority: false as const,
         winProbability: null, technicalSuite: suiteView(r.technicalSuite, options.preview === true),
+        dataEvidence: options.preview || !r.dataEvidence ? undefined : {
+          inputSha256: r.dataEvidence.inputSha256, inputBars: r.dataEvidence.inputBars,
+          analysisAsOf: r.dataEvidence.analysisAsOf, engineSha256: r.dataEvidence.engineSha256,
+          technicalAnalysisSha256: r.dataEvidence.technicalAnalysisSha256,
+          frameFetchRetrievedAt: r.dataEvidence.frameFetchRetrievedAt,
+          nativeInputArchive: r.dataEvidence.nativeInputArchive, scope: r.dataEvidence.scope,
+          orderAuthority: false as const,
+        },
       }])) as ChartPipeline["markets"][number]["frames"],
     })),
   };

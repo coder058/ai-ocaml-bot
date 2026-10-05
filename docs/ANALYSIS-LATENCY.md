@@ -61,15 +61,25 @@ TA-Lib candle functions, a 113-function indicator catalog with explicit missing
 inputs/warmup, and ten partial Murphy panels. This is not 61 validated strategies
 or the complete Murphy book. Candidates have no calibrated win probability.
 
-Active BTC quote-cross paper execution is separate from candle candidates. The
+The BTC quote-cross owner was retired after verified flat handoff on October 5
+12:50 UTC. BTC now shares the candle router; new entries remain disabled. The
 Markov model is shadow-only: next-bar-direction frequency is not net-trade win
 probability. Stocks remain OBSERVE/new entries disabled. Hyperliquid mainnet is
 public-data only. Practice FX lacks credentials and verified execution transport.
 
 ## Next work, not completed
 
-Trigger analysis on newly closed/revised bars and cache unchanged features while
-preserving provenance, calendar/freshness gates and frozen research cohorts.
+Exact native-input and calculation caches now reuse valid unchanged frames while
+refreshing current age and Murphy context. Actual 13:39 scan computed 72/reused
+288 native and extension slots. Its total was 21.666775942081586 seconds; an
+opening-boundary scan took 55.08437746705022 seconds. These individual scans
+are not a controlled speedup benchmark. Cache validation/copy/serialization has
+its own cost; phase instrumentation now separates cache publication. The pipeline
+still polls each minute rather than triggering from every WebSocket close.
+See [rollout evidence and remaining scope](ALPACA-72-READINESS.md).
+
+Integrate native receipt events while preserving provenance, calendar/freshness
+gates and frozen research cohorts.
 Measure closure-to-receipt, queue wait, analysis, durable write, submit-to-ack and
 ack-to-fill separately. Bound provider concurrency; keep order ownership,
 reconciliation and persistence before submission.
@@ -84,3 +94,23 @@ latency slippage and actual queue position. IEX is not a consolidated stock book
 Sources: [paper specification](https://docs.alpaca.markets/us/docs/paper-trading),
 [stock streams](https://docs.alpaca.markets/us/docs/real-time-stock-pricing-data).
 Paper results cannot establish live profitability; this system may lose money live.
+
+
+## Measured cache publication bottleneck — 5 October 13:51–13:55 UTC
+
+The 13:51 actual scan took 38.98685796605423s. Its separate calculation-cache
+write was 5.892564660985954s and native-cache/evidence write 6.845539944944903s.
+A read-only same-document encoding comparison on Dublin measured:
+
+| Cache bytes | Python streamed JSON encode | Single JSON encode | Exact bytes equal |
+|---|---|---|---|
+| 16,123,437 | 3.3732169319409877s | 0.6661777819972485s | Yes |
+| 13,828,699 | 3.748686637962237s | 0.7703925499226898s | Yes |
+
+Atomic publication now encodes once before opening the temporary file, keeping
+its fsync, permissions, NaN rejection and exact JSON bytes. This reduces that
+measured encoding operation on those two documents; it does not establish a
+controlled production scan speedup or broker lifecycle latency. The encoded
+string temporarily occupies another roughly 14–16 MB for these actual files.
+Dublin reported 826 MiB available during rollout; growing histories still need
+memory/disk measurement. Eleven pipeline tests passed after the change.

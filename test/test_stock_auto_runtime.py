@@ -47,8 +47,8 @@ class StockAutoRuntime(unittest.TestCase):
                 'STOCK_AUTO_ORDERS': '1' if armed else '0',
                 'STOCK_AUTO_NEW_ENTRIES': '1' if entries else '0'}
 
-    def run_auto(self, root, armed=True, entries=True, ok=True):
-        result = subprocess.run([str(ENGINE), '--execute'], env=self.environment(root, armed, entries),
+    def run_auto(self, root, armed=True, entries=True, ok=True, extra_env=None):
+        result = subprocess.run([str(ENGINE), '--execute'], env={**self.environment(root, armed, entries),**(extra_env or {})},
                                 capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode == 0, ok, result.stderr)
         return result
@@ -70,6 +70,38 @@ class StockAutoRuntime(unittest.TestCase):
             self.assertEqual(decisions[0]['detail']['reading']['candleShapes'], ['hammer_shape'])
             self.assertEqual(decisions[1]['detail']['originEntryId'], decisions[0]['clientOrderId'])
             self.assertFalse(decisions[1]['detail']['preflight']['buyingPowerChecked'])
+
+    def test_eleventh_stock_is_not_blocked_by_the_old_ten_position_guess(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=self.fixture(directory);self.analysis(root)
+            # SOURCE: ten synthetic pre-existing owned entries exercise the
+            # old capacity boundary; none are real holdings or performance.
+            rows=[]
+            for index in range(10):
+                symbol=f'TST{index}';cid=f'aibotstkFixture{index}'
+                rows.append({'symbol':symbol,'side':'buy','clientOrderId':cid,'state':'resolved',
+                    'request':{'symbol':symbol,'side':'buy','client_order_id':cid,
+                               'type':'market','time_in_force':'day','notional':'100'},
+                    'broker':{'symbol':symbol,'side':'buy','client_order_id':cid,
+                              'status':'filled','filled_qty':'1','filled_avg_price':'100'}})
+            (root/'stock-paper-ledger.json').write_text(json.dumps({'orders':rows}))
+            self.run_auto(root)
+            self.assertEqual(len(self.posts(root)),1)
+            status=json.loads((root/'stock-auto.json').read_text())
+            self.assertEqual(status['maxOpenPositions'],69)
+
+    def test_quote_expiring_during_real_durable_event_write_never_reaches_http(self):
+        import durable_delay
+        with tempfile.TemporaryDirectory() as directory:
+            root=self.fixture(directory);self.analysis(root)
+            self.run_auto(root,extra_env=durable_delay.environment(root,'stock-paper-events.jsonl'))
+            self.assertEqual(self.posts(root),[])
+            rows=json.loads((root/'stock-paper-ledger.json').read_text())['orders']
+            self.assertEqual(rows[0]['state'],'rejected')
+            events=[json.loads(line) for line in (root/'stock-paper-events.jsonl').read_text().splitlines()]
+            self.assertEqual([row['kind'] for row in events],['DECISION','NOT_SENT'])
+            self.run_auto(root)
+            self.assertEqual(self.posts(root),[])
 
     def test_disarmed_paused_closed_and_old_quotes_cannot_submit(self):
         for state, opts in [({}, {'armed': False}), ({}, {'entries': False}), ({'open': False}, {}),

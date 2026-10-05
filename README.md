@@ -38,7 +38,11 @@ contained 13,509 active tradable stocks/ETF; catalog availability does not mean
 all are continuously monitored. A separate authenticated free IEX WebSocket
 captures 30 selected stock/ETF symbols. It uses native
 historical warmup, an incremental cache and the actual equity-session calendar.
-New confluence crypto entries remain paused. A tested OCaml stocks/ETF scheduler
+The 5 October execution-first scanner scope is **72 Alpaca instruments × five
+frames = 360 analysis slots**. Public HIP-3 collection remains separate. BTC's
+legacy quote-cross owner was retired only after verified flat broker/local state;
+BTC now shares the closed-candle router with ETH/SOL. New confluence crypto
+entries remain paused. A tested OCaml stocks/ETF scheduler
 now connects closed candidates to the durable paper router in **observation**;
 no new automatic stock strategy is armed. Conventional
 FX requires an OANDA v20 practice account; its data connector currently reports
@@ -53,12 +57,20 @@ FX-like perps are labeled as such. See [connections and operations](docs/CONNECT
 **Closed candles → OCaml evidence → frozen candidate → route/gates → ownership
 and executable quote preflight → durable request → paper acknowledgement/fills.**
 
-Localhost exposes a filterable 91 x five matrix with factual data/policy/routing
+Localhost exposes a filterable 72 x five matrix with factual data/policy/routing
 states and explicit unknown checks. A candidate is not an order; five frames
 describe the same underlying instrument. The frozen rule uses selected OCaml
 shapes/EMA trend; full TA-Lib supplies separate descriptive Python analysis. No
 calibrated winning probability is displayed. See [execution work evidence](docs/EXECUTION-TRACE-WORK.md)
 and the [stock scheduler/owned-exit runbook](docs/STOCK-AUTOMATION.md).
+
+Closed-frame calculations reuse exact native-input identities only while the
+frame boundary, calendar/session and calculation identities remain valid. Cached
+age and cross-frame Murphy context refresh on every scan. Prospective candidates
+retain their exact native candles/calendar in private content-addressed archives;
+new readings and future joined orders carry actual input/engine hashes. Earlier
+orders are not assigned reconstructed evidence. See
+[current readiness and limitations](docs/ALPACA-72-READINESS.md).
 
 The dated [first-observed quote audit](docs/FORWARD-QUOTE-AUDIT.md) keeps original
 feature/entry receipts, rejects missing liquidity and compares later REST/stream

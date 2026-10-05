@@ -11,6 +11,10 @@ let state_dir =
 let pending_path = Filename.concat state_dir "pending"
 let owned_path = Filename.concat state_dir "owned"
 let event_path = Filename.concat state_dir "events.jsonl"
+(* SOURCE: only one broker owner may manage BTC during the user-requested
+   transition to the closed-candle multiframe policy. *)
+let () = if Sys.file_exists (Filename.concat state_dir "btc-multiframe-owner.json") then
+  failwith "BTC ownership has moved to the multiframe paper router"
 (* GUESS: # UNCALIBRATED GUESS — reject hot quotes older than five seconds
    before paper submission; calibrate with observed queue and broker delays. *)
 let max_quote_age_ns = 5_000_000_000
@@ -112,6 +116,9 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
            match action with
            | Paper_crypto.Hold reason -> log "HOLD %s" reason; None
            | Paper_crypto.Buy ->
+             if Sys.getenv_opt "BTC_LEGACY_NEW_ENTRIES"=Some "0" then
+               (log "HOLD legacy BTC new entries disabled for multiframe handoff"; None)
+             else
              let target = Paper_crypto.order_notional Paper_crypto.Experimental_baseline in
              let limit_price = ceil (current.ask /. tick) *. tick in
              if buying_power < target then

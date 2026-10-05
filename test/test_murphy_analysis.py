@@ -5,6 +5,7 @@ import unittest
 import copy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import talib
@@ -24,6 +25,40 @@ def fixture(count=150):
 
 
 class MurphyTests(unittest.TestCase):
+    def test_later_source_replacement_cannot_mislabel_the_loaded_technical_implementation(self):
+        from murphy_analysis import implementation_identity
+        with patch("murphy_analysis.Path.read_bytes",return_value=b"replaced implementation"):
+            with self.assertRaisesRegex(RuntimeError,"changed during"):
+                implementation_identity()
+
+    def test_cached_extension_matches_full_and_refreshes_current_cross_frame_context(self):
+        rows, at = fixture()
+        requested = [{"symbol": "fixture", "venue": "fixture", "frames": {"5m": [
+            {**r, "t": (datetime(2026,10,1,tzinfo=timezone.utc)+timedelta(minutes=5*i)).isoformat().replace("+00:00","Z")}
+            for i,r in enumerate(rows)]}, "primaryContext": {"source":"first receipt"}}]
+        at = "2026-10-01T12:30:00Z"
+        source = {"asOf":at,"markets":[{"venue":"fixture","symbol":"fixture","frames":{"5m":{"trend":"rising","status":"ready"}}}]}
+        cache = {}
+        first = copy.deepcopy(source); enrich(first,requested,{"5m":5},suite_cache=cache)
+        requested[0]["primaryContext"] = {"source":"new actual receipt"}
+        source["asOf"] = "2026-10-01T12:31:00Z"
+        source["markets"][0]["frames"]["5m"]["trend"] = "falling"
+        actual, expected = copy.deepcopy(source), copy.deepcopy(source)
+        timings=[]
+        with patch("murphy_analysis.analyze_frame", wraps=analyze_frame) as calculate:
+            enrich(actual,requested,{"5m":5},suite_cache=cache,timing_sink=timings)
+            calculate.assert_not_called()
+        enrich(expected,requested,{"5m":5})
+        self.assertEqual(actual,expected)
+        self.assertEqual(timings[0]["frames"]["5m"]["calculation"],"reused")
+        requested[0]["frames"]["5m"][0]["v"] += 1
+        actual, expected = copy.deepcopy(source), copy.deepcopy(source)
+        with patch("murphy_analysis.analyze_frame", wraps=analyze_frame) as calculate:
+            enrich(actual,requested,{"5m":5},suite_cache=cache)
+            calculate.assert_called_once()
+        enrich(expected,requested,{"5m":5})
+        self.assertEqual(actual,expected)
+
     def test_measured_timings_do_not_change_features_or_hide_invalid_frames(self):
         rows, as_of = fixture()
         source = {"asOf": as_of, "markets": [{"venue": "fixture", "frames": {

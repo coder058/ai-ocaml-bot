@@ -6,6 +6,10 @@ let path name=Filename.concat state_dir name
 let field=Paper_broker.member
 let text name row=Option.value ~default:"" (Paper_broker.string (field name row))
 let unwrap=function Ok value->value|Error message->failwith message
+(* SOURCE: the requested Alpaca watchlist contains 69 stocks/ETFs in
+   research/market_pipeline.py EQUITIES. One $100 position per instrument,
+   rather than the previous guessed ten-position stock allocation. *)
+let max_stock_positions = 69
 let atomic filename value =
   let temporary=filename ^ ".tmp" in
   (* SOURCE: match the private durable router's state permissions. *)
@@ -60,6 +64,8 @@ let run ()=
     incr invoked;rows:=orders ();
     if not ok then block ticker "Serialized stock router rejected or could not verify this request; inspect durable events before retrying" in
   let tickers=List.sort_uniq String.compare (List.map (fun row->text "symbol" row) !rows) in
+  let exit_quotes = if tickers=[] then Ok (`Assoc ["quotes",`Assoc []])
+    else Paper_stock_broker.quotes tickers in
   (* SOURCE: owned exits take priority over new entries. Manual stock positions
      have no managed entry evidence and must not be adopted by this scheduler. *)
   List.iter (fun ticker->
@@ -72,7 +78,7 @@ let run ()=
         let frame=text "frame" evidence in
         (match stop with None->block ticker "Managed entry invalidation missing"|Some stop->
           if not session then block ticker "Regular stock session closed; local stop cannot execute outside this session"
-          else match Paper_stock_broker.quotes [ticker] with
+          else match exit_quotes with
             | Error _->block ticker "Owned exit quote read unavailable"
             | Ok quotes->(match Stock_policy.quote ~now:(Unix.gettimeofday ()) ~symbol:ticker quotes with
               | Error reason->block ticker reason
@@ -88,8 +94,8 @@ let run ()=
                         "frame",`String frame;"invalidationLevel",`Float stop;"reason",`String reason]))))
   ) tickers;
   (match signals_result with Error reason->block "all" reason|Ok _->());
-  (* GUESS: # UNCALIBRATED GUESS — reuse the crypto experiment's ten-position
-     operational limit for the stock paper cohort; not a fitted allocation. *)
+  (* SOURCE: all requested stock instruments can hold one owned position;
+     each serialized router still checks current broker buying power. *)
   List.iter (fun (signal:Stock_policy.signal)->
     let ticker=signal.symbol and cid=Stock_policy.entry_id signal in
     previews:=`Assoc ["symbol",`String ticker;"frame",`String signal.frame;"bar",`String signal.bar;
@@ -100,7 +106,7 @@ let run ()=
     else if pending ticker !rows then block ticker "Pending owned order must reconcile"
     else if owned ticker !rows<>Exact_decimal.zero then block ticker "One owned position per instrument; other frames do not scale in"
     else if List.length (List.filter (fun symbol->owned symbol !rows>Exact_decimal.zero || pending symbol !rows)
-      (List.sort_uniq String.compare (List.map (fun row->text "symbol" row) !rows)))>=Multi_paper.max_open_tickets then
+      (List.sort_uniq String.compare (List.map (fun row->text "symbol" row) !rows)))>=max_stock_positions then
       block ticker "Stock cohort operational position limit reached"
     else
       let reason="Rising EMA20/EMA50 and bullish candle shape on a closed stock bar; exploratory paper policy" in
@@ -128,7 +134,7 @@ let run ()=
     "mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
     "automaticStrategy",`Bool true;"newEntriesEnabled",`Bool new_entries;
     "sessionOpen",`Bool session;"entryUsd",`Float Multi_paper.entry_usd;
-    "maxOpenPositions",`Int Multi_paper.max_open_tickets;"eligibleLongSignals",`Int (List.length signals);
+    "maxOpenPositions",`Int max_stock_positions;"eligibleLongSignals",`Int (List.length signals);
     "routerInvocations",`Int !invoked;"candidates",`List (List.rev !previews);
     "ownedPositions",`List owned_positions;
     "abstentions",`List (List.rev !abstentions);"winProbability",`Null;

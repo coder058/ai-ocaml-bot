@@ -505,6 +505,32 @@ def service_state(credentials: dict[str, str]) -> dict[str, object]:
         ["systemctl", "is-active", "--quiet", capture_unit],
         check=False,
     ).returncode == 0
+    # SOURCE: the legacy BTC process can be retired while the actual closed-
+    # candle paper timers remain active. An installed unit or old file alone
+    # cannot establish that a scheduler is currently healthy.
+    if not active:
+        now = datetime.now(timezone.utc)
+        for setting, default_unit, filename in (
+            ("AI_OCAML_MULTI_PAPER_TIMER", "ai-ocaml-multi-paper.timer", "multi-paper.json"),
+            ("AI_OCAML_STOCK_PAPER_TIMER", "ai-ocaml-stock-paper.timer", "stock-auto.json"),
+        ):
+            unit = credentials.get(setting, default_unit)
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]*\.timer", unit):
+                raise ValueError("Invalid paper timer configuration")
+            live = subprocess.run(["systemctl", "is-active", "--quiet", unit], check=False).returncode == 0
+            try:
+                runtime = json.loads((STATE_DIR / filename).read_text())
+                at = datetime.fromisoformat(runtime["asOf"].replace("Z", "+00:00"))
+                # GUESS: # UNCALIBRATED GUESS — reuse the existing 120-second
+                # OMS status lifetime. This is not a measured broker latency.
+                healthy = live and 0 <= (now-at).total_seconds() <= 120
+                if healthy and runtime.get("mode") in ("PAPER_EXPERIMENT", "OBSERVE"):
+                    active = True
+                    mode = "PAPER_ORDER" if credentials.get("PAPER_ORDERS") == "1" and runtime.get("mode") == "PAPER_EXPERIMENT" else "MONITOR"
+                    if mode == "PAPER_ORDER":
+                        break
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
     return {"active": active, "mode": mode, "captureActive": capture_active}
 
 
@@ -587,6 +613,26 @@ def joined_decisions(orders: list[dict], path: Path, prefix: str):
     return matched
 
 
+def native_input_evidence(reading: dict) -> dict:
+    """Allowlist recorded hashes only; never expose archive paths or raw inputs."""
+    proof = reading.get("dataEvidence")
+    if not isinstance(proof, dict) or proof.get("schema") != "native_closed_frame_input_v1" or proof.get("orderAuthority") is not False:
+        return {}
+    hashes = {"input_sha256":"inputSha256", "engine_sha256":"engineSha256",
+              "technical_analysis_sha256":"technicalAnalysisSha256"}
+    # SOURCE: a SHA-256 hex digest has 64 hexadecimal characters.
+    if any(not isinstance(proof.get(name), str) or len(proof[name]) != 64 or
+           any(c not in "0123456789abcdef" for c in proof[name]) for name in hashes.values()):
+        return {}
+    result = {key:proof[name] for key,name in hashes.items()}
+    for key,name in (("analysis_as_of","analysisAsOf"), ("frame_fetch_retrieved_at","frameFetchRetrievedAt"),
+                     ("native_input_archive","nativeInputArchive")):
+        value = proof.get(name)
+        if isinstance(value,str):
+            result[key] = value
+    return result
+
+
 def stock_order_evidence(orders:list[dict],path:Path=STATE_DIR/"stock-paper-events.jsonl") -> dict:
     evidence={}
     for order,row in joined_decisions(orders,path,"aibotstk"):
@@ -601,6 +647,7 @@ def stock_order_evidence(orders:list[dict],path:Path=STATE_DIR/"stock-paper-even
                 "invalidation_level":detail.get("invalidationLevel"),"ema20":reading.get("ema20"),
                 "ema50":reading.get("ema50"),"rsi14":reading.get("rsi14"),"trend":reading.get("trend"),
                 "candle_shapes":", ".join(reading.get("candleShapes",[]))}
+            values.update(native_input_evidence(reading))
             preflight=detail.get("preflight",{})
             if isinstance(preflight,dict):
                 values.update({"trigger_bid":preflight.get("bid"),"trigger_ask":preflight.get("ask"),
@@ -627,6 +674,7 @@ def multi_order_evidence(orders: list[dict],
             "candle_shapes": ", ".join(reading.get("candleShapes", [])),
             "bar_close": reading.get("close"), "trigger_bid": reading.get("triggerBid"),
             "trigger_ask": reading.get("triggerAsk"), "trigger_quote_time": reading.get("triggerQuoteTime")}
+        values.update(native_input_evidence(reading))
         result[order["id"]] = {key: str(value) for key, value in values.items()
                                       if value is not None}
     return result

@@ -37,6 +37,10 @@ let () =
      Result.is_error (Paper_crypto_broker.canonical "ETH//USD"));
   check "fresh closed signal accepted and legacy BTC excluded"
     (match Multi_paper.signals ~now document with Ok [s] -> s.symbol="ETH/USD" | _ -> false);
+  check "explicit handoff policy includes BTC without changing default authority"
+    (match Multi_paper.signals ~include_btc:true ~now document with
+      | Ok signals -> List.map (fun (s:Multi_paper.signal)->s.symbol) signals=["ETH/USD";"BTC/USD"]
+      | _ -> false);
   check "crypto entry universe excludes altcoins"
     (Paper_crypto_broker.allowed_entry "BTCUSD" && Paper_crypto_broker.allowed_entry "ETH/USD" &&
      Paper_crypto_broker.allowed_entry "SOL/USD" && not (Paper_crypto_broker.allowed_entry "BONK/USD") &&
@@ -51,6 +55,9 @@ let () =
     (Multi_paper.signals ~now (change "markets" (`List [change "frames"
       (`Assoc ["5m",change "winProbability" (`Float 0.9) reading]) (market "ETH/USD")]) document)=Ok []);
   let state,ticket = Multi_paper.entry Multi_paper.empty signal ~now ~qty:1. ~price:100. in
+  let btc_state,_ = Multi_paper.entry Multi_paper.empty {signal with symbol="BTC/USD"} ~now ~qty:1. ~price:100. in
+  check "BTC handoff ownership survives durable state recovery"
+    (Multi_paper.of_json (Multi_paper.to_json btc_state)=Ok btc_state);
   check "one owned ticket prevents contradictory frames"
     (not (Multi_paper.eligible state {signal with frame="1h"}));
   check "entry identifier deterministic"

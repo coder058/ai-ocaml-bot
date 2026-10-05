@@ -23,13 +23,15 @@ from zoneinfo import ZoneInfo
 
 from hyperliquid_capture import COINS
 from stream_capture import credentials as stream_credentials
-from murphy_analysis import enrich, required_seed_bars, forward_reading
+from murphy_analysis import enrich, required_seed_bars, forward_reading, implementation_identity
 from primary_trend_context import collect as collect_primary_context
 from hip3_primary_context import collect as collect_hip3_primary_context
 from hip3_asset_context import collect as collect_hip3_asset_context
 from decision_quote_capture import collect as collect_decision_quotes
 from archived_quote_reference import augment as augment_archived_quotes
 from stock_session_opportunities import protocol as stock_opportunity_protocol, prepare as prepare_stock_opportunities
+from incremental_analysis import analyze as analyze_incremental
+from decision_inputs import attach as attach_decision_inputs
 
 # SOURCE: requested timeframes and official Alpaca / Hyperliquid interval names.
 FRAMES = {"1m": (1, "1Min"), "5m": (5, "5Min"), "30m": (30, "30Min"),
@@ -190,6 +192,23 @@ def merge(prior: list[dict], new: list[dict]) -> list[dict]:
     return [by_start[key] for key in sorted(by_start)[-MAX_CACHE_BARS:]]
 
 
+def history_batches(symbols, markets, venue, frame, seed_start):
+    """Keep cold/thin instruments from widening every warm symbol's fetch.
+
+    SOURCE: same seed requirement and last-bar overlap as before. Group by actual
+    requested UTC date and warmup state; no invented candle or retry threshold.
+    """
+    groups = {}
+    for symbol in symbols:
+        rows = markets[f"{venue}|{symbol}"]["frames"].get(frame, [])
+        seeded = len(rows) >= SEED_BARS
+        start = instant(rows[-1]["t"]) if seeded else seed_start
+        group = groups.setdefault((seeded, start.date()), [])
+        group.append((symbol, start))
+    return [([symbol for symbol, _ in rows], min(start for _, start in rows))
+            for rows in groups.values()]
+
+
 def category(symbol: str, venue: str) -> str:
     if venue == "Alpaca crypto":
         return "Crypto"
@@ -291,10 +310,14 @@ def hip3_bars(symbol: str, frame: str, start: datetime, as_of: datetime) -> list
 
 
 def atomic(path: Path, document: dict) -> None:
+    # SOURCE: actual 5 October cache-byte parity/encoding measurements in
+    # ANALYSIS-LATENCY.md. dumps uses the C encoder; dump streams Python chunks.
+    # Encode before opening the temporary file, retaining NaN rejection/fsync.
+    encoded = json.dumps(document, separators=(",", ":"), allow_nan=False)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     with temporary.open("w", encoding="utf-8") as target:
-        json.dump(document, target, separators=(",", ":"), allow_nan=False)
+        target.write(encoded)
         target.write("\n")
         target.flush()
         os.fsync(target.fileno())
@@ -306,7 +329,7 @@ def atomic(path: Path, document: dict) -> None:
     os.replace(temporary, path)
 
 
-def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
+def scan(cache_path: Path, output: Path, engine: Path = ENGINE, *, verify_full=False) -> dict:
     started = time.monotonic()
     # SOURCE: measured monotonic elapsed seconds per scanner phase. These are
     # operational timings, not exchange-to-order latency or fitted thresholds.
@@ -323,6 +346,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {"markets": {}}
     markets = cache["markets"]
     errors = []
+    history_requests = []
     assets = paper_get("/v2/assets?status=active&asset_class=crypto", credentials)
     if not isinstance(assets, list):
         raise ValueError("paper asset catalog missing")
@@ -341,10 +365,16 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
         "cryptoAllowed": crypto, "protectedStocks": ["AAPL"],
         "assets": [{k: a.get(k) for k in ("symbol", "name", "exchange", "fractionable", "shortable")}
                    for _, a in sorted(tradeable_stocks.items())]})
-    hl_meta, derivative_contexts, context_errors = collect_hip3_asset_context(request)
-    errors.extend(context_errors)
-    active_hl = {a["name"] for a in hl_meta["universe"] if not a.get("isDelisted")}
-    hip3 = [symbol for symbol in HIP3_REQUESTED if symbol in active_hl]
+    # SOURCE: the user's execution scope is now the 72 Alpaca products. Retain
+    # the earlier public-data research mode as an explicit deployment choice.
+    alpaca_only = os.environ.get("MARKET_UNIVERSE") == "alpaca_only"
+    derivative_contexts = {}
+    hip3 = []
+    if not alpaca_only:
+        hl_meta, derivative_contexts, context_errors = collect_hip3_asset_context(request)
+        errors.extend(context_errors)
+        active_hl = {a["name"] for a in hl_meta["universe"] if not a.get("isDelisted")}
+        hip3 = [symbol for symbol in HIP3_REQUESTED if symbol in active_hl]
     # GUESS: # UNCALIBRATED GUESS — request two calendar days per seed bar to
     # cover weekends/holidays; actual returned sessions define all adjacency.
     calendar_start = (as_of - timedelta(days=SEED_BARS * 2)).date().isoformat()
@@ -385,11 +415,22 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
             fetched: dict[str, list[dict]] = {}
             boundaries = {symbol: as_of for symbol in due}
             if venue.startswith("Alpaca"):
-                try:
-                    fetched = alpaca_bars(due, frame, start, as_of, credentials,
-                                          equities=venue == "Alpaca equities")
-                except Exception as error:
-                    errors.append({"venue": venue, "frame": frame, "error": type(error).__name__})
+                for batch, batch_start in history_batches(due, markets, venue, frame, seed_start):
+                    request_started = time.monotonic()
+                    try:
+                        current = alpaca_bars(batch, frame, batch_start, as_of, credentials,
+                                             equities=venue == "Alpaca equities")
+                        fetched.update(current)
+                        history_requests.append({"venue": venue, "frame": frame, "symbols": batch,
+                            "start": utc(batch_start), "asOf": utc(as_of),
+                            "returnedClosedBars": sum(len(rows) for rows in current.values()),
+                            "seconds": time.monotonic() - request_started, "status": "received"})
+                    except Exception as error:
+                        errors.append({"venue": venue, "frame": frame, "symbols": batch,
+                                       "error": type(error).__name__})
+                        history_requests.append({"venue": venue, "frame": frame, "symbols": batch,
+                            "start": utc(batch_start), "asOf": utc(as_of),
+                            "seconds": time.monotonic() - request_started, "status": "failed"})
             else:
                 for symbol in due:
                     try:
@@ -424,8 +465,9 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
         errors.append({"stage": "primary_context", "error": type(error).__name__})
     primary_context = cache.get("primaryContext", {})
     try:
-        cache["hip3PrimaryContext"] = collect_hip3_primary_context(request, universes,
-            datetime.now(timezone.utc), cache.get("hip3PrimaryContext"))
+        if hip3:
+            cache["hip3PrimaryContext"] = collect_hip3_primary_context(request, universes,
+                datetime.now(timezone.utc), cache.get("hip3PrimaryContext"))
     except (ValueError, KeyError, TypeError) as error:
         errors.append({"stage": "hip3_primary_context", "error": type(error).__name__})
     hip3_primary_context = cache.get("hip3PrimaryContext", {})
@@ -454,12 +496,40 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     payload = {"asOf": utc(final_as_of), "markets": requested}
     # SOURCE: fingerprint the actual deployed analyzer before and after use;
     # subsequent first observations retain it without repairing old journals.
-    result, engine_sha256 = analyze_fingerprinted(payload, engine)
+    analysis_cache_path = output.with_name("market-analysis-cache.json")
+    try:
+        analysis_cache = json.loads(analysis_cache_path.read_text()) if analysis_cache_path.exists() else {}
+    except (OSError, ValueError):
+        # Calculation cache is disposable; source candles/journals are not.
+        analysis_cache = {}
+    if not isinstance(analysis_cache, dict):
+        analysis_cache = {}
+    result, engine_sha256, base_cache, incremental_counts = analyze_incremental(
+        payload, engine, analysis_cache.get("ocaml", {}), analyze_fingerprinted,
+        {name: minutes for name, (minutes, _) in FRAMES.items()})
     elapsed("shared_ocaml_analysis")
     descriptive_timings = []
+    suite_cache = analysis_cache.get("technical", {})
+    if not isinstance(suite_cache, dict):
+        suite_cache = {}
     enrich(result, requested, {name: minutes for name, (minutes, _) in FRAMES.items()},
-           timing_sink=descriptive_timings)
+           timing_sink=descriptive_timings, suite_cache=suite_cache)
     elapsed("descriptive_technical_analysis")
+    if verify_full:
+        # Optional rollout diagnostic compares ALL actual slots on the exact
+        # same native inputs/clock. Disagreement prevents snapshot publication.
+        expected, expected_sha = analyze_fingerprinted(payload, engine)
+        enrich(expected, requested, {name: minutes for name, (minutes, _) in FRAMES.items()})
+        if expected_sha != engine_sha256 or expected != result:
+            raise RuntimeError("incremental/full analysis parity failed")
+        elapsed("full_parity_verification")
+    active_slots = {m["venue"] + "|" + m["symbol"] + "|" + f for m in requested for f in FRAMES}
+    atomic(analysis_cache_path, {"ocaml": base_cache,
+        "technical": {key: value for key, value in suite_cache.items() if key in active_slots}})
+    elapsed("analysis_cache_write")
+    retained_inputs = attach_decision_inputs(result, requested, output.parent / "decision-inputs",
+                                             engine_sha256, implementation_identity())
+    elapsed("candidate_input_evidence")
     quote_references, quote_errors = collect_decision_quotes(request, universes, credentials)
     elapsed("quote_reference_requests")
     quote_references, archive_quote_coverage = augment_archived_quotes(quote_references, universes,
@@ -478,7 +548,9 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     for row, original in zip(result["markets"], requested, strict=True):
         row["category"] = original["category"]
         row["fetches"] = original["fetches"]
-        row["execution"] = "Alpaca paper quote_cross_30s_v1" if row["symbol"] == "BTC/USD" else "analysis_only"
+        # The scanner cannot observe runtime entry gates or invent execution.
+        # Actual enabled/paused ownership comes from the separate OMS reports.
+        row["execution"] = "Alpaca paper route; runtime gates separate" if row["venue"].startswith("Alpaca") else "public data only"
         row["dataSource"] = "native_historical_as_retrieved"
         quote = quote_references.get(row["venue"] + "|" + row["symbol"],
             {"status": "unconnected", "purpose": "observed_quote_reference_not_execution", "orderAuthority": False, "winProbability": None})
@@ -488,7 +560,9 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
             reading["quoteReference"] = quote
     result.update({"retrievedAt": utc(datetime.now(timezone.utc)), "errors": errors,
                    "marketsAnalyzed": len(requested),
-                   "framesRequested": list(FRAMES), "brokerOrderSymbols": ["BTC/USD"],
+                   "framesRequested": list(FRAMES), "executionUniverse": "alpaca_only" if alpaca_only else "mixed_public_research",
+                   # Routing capability is not evidence of a broker order.
+                   "brokerOrderSymbols": crypto + equities if alpaca_only else ["BTC/USD"],
                    "pipeline": ["Data", "Closed candles", "OCaml analysis", "Evidence and risk", "Paper orders"]})
     # SOURCE: preserve the first observed decision for a particular closed bar.
     # Later historical revisions do not overwrite that forward decision record.
@@ -542,6 +616,13 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     result["archiveQuoteCoverage"] = archive_quote_coverage
     result["newFrameDecisions"] = len(decisions)
     result["engineSha256"] = engine_sha256
+    result["nativeHistoryRequests"] = history_requests
+    result["candidateInputsRetained"] = retained_inputs
+    result["incrementalAnalysis"] = {"ocaml": incremental_counts,
+        "technicalComputedFrames": sum(r["calculation"] == "computed" for m in descriptive_timings for r in m["frames"].values()),
+        "technicalReusedFrames": sum(r["calculation"] == "reused" for m in descriptive_timings for r in m["frames"].values()),
+        "currentClockAndMurphyPanels": "refreshed_on_every_scan", "fullParityVerified": verify_full,
+        "orderAuthority": False}
     result["currentCandidates"] = sum(reading.get("candidate") is not None
         for market in result["markets"] for reading in market["frames"].values())
     # SOURCE: actual monotonic scan time through evidence/cache writes. Earlier
@@ -550,7 +631,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     result["processingSeconds"] = time.monotonic() - started
     result["timingScope"] = "scan_start_through_evidence_cache_before_snapshot_publication"
     result["descriptiveAnalysisTiming"] = {"mode": "sequential", "markets": descriptive_timings,
-        "scope": "Python/C technical extension and Murphy panels; excludes OCaml, data requests, publication and broker submission"}
+        "scope": "Python/C technical extension calculation or validated reuse and current Murphy panels; excludes cache writes, OCaml, data requests, publication and broker submission"}
     atomic(output, result)
     print(json.dumps({"asOf": result["asOf"], "markets": len(requested), "errors": len(errors),
                       "processingSeconds": result["processingSeconds"],"timingsSeconds":timings}), flush=True)
@@ -562,5 +643,7 @@ if __name__ == "__main__":
     parser.add_argument("--cache", type=Path, default=STATE / "market-pipeline-cache.json")
     parser.add_argument("--output", type=Path, default=STATE / "market-pipeline.json")
     parser.add_argument("--engine", type=Path, default=ENGINE)
+    parser.add_argument("--verify-full", action="store_true",
+                        help="Compare every incremental result to the frozen full calculation before publication")
     args = parser.parse_args()
-    scan(args.cache, args.output, args.engine)
+    scan(args.cache, args.output, args.engine, verify_full=args.verify_full)

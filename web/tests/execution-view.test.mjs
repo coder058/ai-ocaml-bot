@@ -29,6 +29,22 @@ test("all 455 cells distinguish the separate BTC engine, paused entries, stocks 
   assert.equal(executionView(null, now), null);
 });
 
+test("the 72-product execution universe exposes all 360 routes after exclusive BTC handoff", () => {
+  const t=fixture();
+  t.marketPipeline.markets=t.marketPipeline.markets.filter(m=>m.venue!=="Hyperliquid HIP-3");
+  t.multiPaper.legacyBtcOwner=false;t.multiPaper.newEntriesEnabled=true;
+  Object.assign(t.connections.stocks,{sessionOpen:true,accountReady:true,executionGateArmed:true,canSubmitNow:true});
+  t.connections.stockAuto={asOf:at,automaticStrategy:true,mode:"PAPER_EXPERIMENT",newEntriesEnabled:true,ownedPositions:[]};
+  const result=executionView(t,now);
+  assert.equal(result.symbols,72);assert.equal(result.frames,360);
+  assert.deepEqual(result.routeCounts,{"Paper entry gate enabled":360});
+  assert.equal(result.rows.filter(r=>r.symbol==="BTC/USD").length,5);
+  assert.equal(result.orders.length,0);
+  assert.ok(result.rows.every(r=>r.steps.find(s=>s.stage==="Risk / ownership").state==="unknown"));
+  t.multiPaper.legacyBtcOwner=true;
+  assert.equal(executionView(t,now).routeCounts["Separate BTC engine"],5);
+});
+
 test("observed quote reference never replaces risk readiness or historical order evidence", () => {
   const t=fixture(); const r=t.marketPipeline.markets[1].frames['30m'];
   r.quoteReference={purpose:'observed_quote_reference_not_execution',orderAuthority:false,winProbability:null,status:'stale',feed:'synthetic',quoteAt:at,receivedAt:at,bid:100,ask:101};

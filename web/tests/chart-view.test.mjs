@@ -46,3 +46,19 @@ test("wall previews keep actual bars and overlays while chart details retain the
   assert.equal(chartView(raw, { venue: "fixture", symbol: "unknown" }).markets.length, 0);
   assert.equal(suite.patternEvents.length, 2);
 });
+
+test("native provenance stays in details with an allowlist and no fabricated older proof", () => {
+  // SOURCE: synthetic hashes test projection only, never broker execution.
+  const proof = { inputSha256: "a".repeat(64), inputBars: 100, analysisAsOf: "2026-10-05T13:31:00Z",
+    engineSha256: "b".repeat(64), technicalAnalysisSha256: "c".repeat(64),
+    frameFetchRetrievedAt: "2026-10-05T13:31:01Z", nativeInputArchive: "retained", scope: "native inputs",
+    privateFile: "private path", orderAuthority: false };
+  const raw = { markets: [{ symbol: "QQQ", venue: "Alpaca equities", frames: { "1m": { dataEvidence: proof } } }] };
+  const detail = chartView(raw).markets[0].frames["1m"].dataEvidence;
+  assert.equal(detail.inputSha256, proof.inputSha256);
+  assert.equal(detail.orderAuthority, false);
+  assert.equal(JSON.stringify(detail).includes("private path"), false);
+  assert.equal(chartView(raw, { preview: true }).markets[0].frames["1m"].dataEvidence, undefined);
+  delete raw.markets[0].frames["1m"].dataEvidence;
+  assert.equal(chartView(raw).markets[0].frames["1m"].dataEvidence, undefined);
+});

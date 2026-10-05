@@ -57,3 +57,10 @@
  (name test_fx_order_plan)
  (modules test_fx_order_plan)
  (libraries paper_market fx_planning))
+
+(test
+ (name test_alpaca_policy_coverage)
+ (modules test_alpaca_policy_coverage)
+ (libraries paper_market yojson)
+ (deps fixtures/alpaca-universe.json)
+ (action (run %{test} %{dep:fixtures/alpaca-universe.json})))

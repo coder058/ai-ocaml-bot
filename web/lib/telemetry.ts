@@ -64,6 +64,12 @@ export type JournalEvent = {
 
 export type FrameName = "1m" | "5m" | "30m" | "1h" | "4h";
 export type FrameReading = {
+  dataEvidence?: {
+    inputSha256: string; inputBars: number; analysisAsOf: string;
+    engineSha256: string; technicalAnalysisSha256: string;
+    frameFetchRetrievedAt: string | null; nativeInputArchive: string;
+    scope: string; orderAuthority: false;
+  };
   quoteReference?: Record<string, unknown>;
   status:
     | "invalid"
@@ -92,6 +98,11 @@ export type FrameReading = {
   winProbability: null;
 };
 export type MarketPipeline = {
+  incrementalAnalysis?: {
+    ocaml: { computedFrames: number; reusedFrames: number; invokedMarkets: number; scope: string };
+    technicalComputedFrames: number; technicalReusedFrames: number;
+    currentClockAndMurphyPanels: string; fullParityVerified: boolean; orderAuthority: false;
+  };
   asOf: string;
   retrievedAt: string;
   engine: string;
@@ -192,6 +203,7 @@ export type PaperTelemetry = {
     asOf: string;
     mode: "OBSERVE" | "PAPER_EXPERIMENT";
     newEntriesEnabled?: boolean;
+    legacyBtcOwner?: boolean;
     policy: string;
     calibrated: false;
     winProbability: null;

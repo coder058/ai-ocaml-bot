@@ -63,7 +63,7 @@ let quote_fresh ~now (quote : Paper_crypto_broker.quote) =
   let age = now -. (float_of_int quote.minute *. 60. +. quote.seconds) in
   age >= 0. && age <= max_quote_age_seconds
 
-let signals ~now document =
+let signals ?(include_btc=false) ~now document =
   match string (field "asOf" document), field "markets" document,
         string (field "policy" document), field "orderAuthority" document with
   | Some as_of, Some (`List markets), Some "trend_candle_confluence_v1", Some (`Bool false) ->
@@ -75,7 +75,8 @@ let signals ~now document =
          | Some "Alpaca crypto", Some symbol, Some readings ->
            (match Paper_crypto_broker.canonical symbol with
             | Error _ -> []
-            | Ok "BTC/USD" -> [] (* SOURCE: legacy orderer retains exclusive BTC ownership. *)
+            | Ok "BTC/USD" when not include_btc -> []
+              (* SOURCE: BTC needs a verified exclusive-owner handoff. *)
             | Ok symbol when not (Paper_crypto_broker.allowed_entry symbol) -> []
             | Ok symbol -> List.filter_map (fun (frame, minutes) ->
                 match field frame readings with
@@ -204,7 +205,7 @@ let of_json document =
       entry_filled=required_number "entryFilledQty" row; exit_filled=required_number "exitFilledQty" row;
       closed=(match field "closed" row with Some (`Bool value) -> value | _ -> failwith "closed absent");
       last_exit_quote=string (field "lastExitQuote" row); pending} in
-    if Paper_crypto_broker.canonical t.symbol <> Ok t.symbol || t.symbol = "BTC/USD" ||
+    if Paper_crypto_broker.canonical t.symbol <> Ok t.symbol ||
        frame_minutes t.frame = None || t.stop <= 0. || t.owned_max < 0. ||
        t.entry_filled < 0. || t.exit_filled < 0. ||
        not (String.starts_with ~prefix:"jsbotmtf" t.entry_id) then failwith "invalid ticket";

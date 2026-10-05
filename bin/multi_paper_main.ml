@@ -41,7 +41,17 @@ let pending_fields (pending : Multi_paper.pending) = [
   "reason",`String pending.reason; "reading",pending.reading]
 
 let run ~execute () =
+  let include_btc = Sys.getenv_opt "MULTI_PAPER_INCLUDE_BTC"=Some "1" in
+  if include_btc then (
+    let marker=try Yojson.Safe.from_file (path "btc-multiframe-owner.json") with _->`Null in
+    if Paper_broker.string (Paper_broker.member "owner" marker)<>Some "multi-frame" ||
+       Paper_broker.member "verifiedBrokerFlat" marker<>Some (`Bool true) ||
+       Paper_broker.member "legacyPendingClear" marker<>Some (`Bool true) ||
+       Sys.file_exists (path "pending") || Sys.file_exists (path "owned") then
+      failwith "BTC exclusive owner handoff is missing or legacy intent remains" );
   let state = ref (match read_state () with Ok state -> state | Error e -> failwith e) in
+  if not include_btc && Multi_paper.ticket_for !state "BTC/USD"<>None then
+    failwith "BTC owned ticket cannot run with its owner gate disabled";
   let failures = ref [] and actions = ref [] in
   let failure symbol reason = failures := `Assoc ["symbol",`String symbol;
     "reason",`String reason] :: !failures in
@@ -67,7 +77,7 @@ let run ~execute () =
   let document = try Yojson.Safe.from_file (path "market-pipeline.json")
                  with _ -> `Null in
   let now = Unix.gettimeofday () in
-  let signals = match Multi_paper.signals ~now document with
+  let signals = match Multi_paper.signals ~include_btc ~now document with
     | Ok signals -> signals | Error e -> failure "all" e; [] in
   let armed = execute && Sys.getenv_opt "MULTI_PAPER_ORDERS" = Some "1" &&
               Sys.getenv_opt "PAPER_ORDERS" = Some "1" in
@@ -82,7 +92,18 @@ let run ~execute () =
        POST. A timeout/unknown response leaves this pending ID unresolved. *)
     event "DECISION" ticket (pending_fields pending);
     let market_exit=Paper_broker.string (Paper_broker.member "orderType" pending.reading)=Some "market" in
-    match Paper_crypto_broker.submit ?qty_text:pending.quantity_text ~market_exit ~asset ~side:pending.side ~qty:pending.requested_qty
+    let boundary_now=Unix.gettimeofday () in
+    let quote_at=Option.bind (Paper_broker.string (Paper_broker.member "triggerQuoteTime" pending.reading)) Stock_policy.timestamp in
+    let quote_current=market_exit || match quote_at with Some at ->
+      boundary_now>=at && boundary_now-.at<=Multi_paper.max_quote_age_seconds | None->false in
+    let candidate_current=pending.side="sell" || match Multi_paper.signals ~include_btc ~now:boundary_now document with
+      | Ok signals->List.exists (fun (s:Multi_paper.signal)->s.symbol=ticket.symbol && s.frame=ticket.frame && s.bar=ticket.bar) signals
+      | Error _->false in
+    if not quote_current || not candidate_current then (
+      let next={ticket with pending=None;closed=(pending.side="buy" || ticket.closed)} in
+      replace next;event "NOT_SENT" next (pending_fields pending);
+      failure ticket.symbol "Quote or candle candidate expired during durable writes; no network order sent")
+    else match Paper_crypto_broker.submit ?qty_text:pending.quantity_text ~market_exit ~asset ~side:pending.side ~qty:pending.requested_qty
       ~limit_price:pending.limit_price ~client_order_id:pending.client_id () with
     | Error error ->
       (* SOURCE: HTTP 400/403/422 explicitly reject bad/forbidden/invalid order
@@ -233,7 +254,7 @@ let run ~execute () =
         else if qty < asset.minimum then failure signal.symbol "Entry is below the broker's minimum quantity"
         else if armed && account_ok "buy" &&
             Multi_paper.quote_fresh ~now:(Unix.gettimeofday ()) quote &&
-            (match Multi_paper.signals ~now:(Unix.gettimeofday ()) document with
+            (match Multi_paper.signals ~include_btc ~now:(Unix.gettimeofday ()) document with
              | Ok current -> List.exists (fun (s : Multi_paper.signal) ->
                  s.symbol=signal.symbol && s.frame=signal.frame && s.bar=signal.bar) current
              | Error _ -> false) then (
@@ -251,7 +272,7 @@ let run ~execute () =
     "activeTickets",`List (List.map Multi_paper.ticket_json (Multi_paper.active_tickets !state));
     "lastActions",`List (List.rev !actions); "abstentions",`List (List.rev !failures);
     "stopHandling",`String "Local latest-bid invalidation exit; no resting broker stop";
-    "legacyBtcOwner",`Bool true;
+    "legacyBtcOwner",`Bool (not include_btc);
     "timeframes",`List (List.map (fun (name,_) -> `String name) Frame_analysis.frames)] in
   atomic snapshot_path result;
   print_endline (Yojson.Safe.to_string (`Assoc ["mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");

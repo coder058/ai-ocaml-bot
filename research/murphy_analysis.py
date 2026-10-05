@@ -9,12 +9,19 @@ from __future__ import annotations
 
 import math
 import time
+import copy
+import hashlib
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import talib
 from talib import abstract
 from forward_features import forward_reading
+from incremental_analysis import signature, reusable, save
+
+# SOURCE: capture the loaded implementation's source, not a later replacement.
+_IMPLEMENTATION_SOURCE = Path(__file__).read_bytes()
 
 # SOURCE: these are TA-Lib's published descriptive indicator groups, excluding
 # arithmetic transforms and functions that require a second independent asset.
@@ -266,24 +273,50 @@ def analyze_frame(rows, minutes, as_of, expected_starts=()):
             "winProbability": None}
 
 
-def enrich(result, requested, frame_minutes, *, timing_sink=None):
+def implementation_identity():
+    if Path(__file__).read_bytes() != _IMPLEMENTATION_SOURCE:
+        raise RuntimeError("technical implementation changed during the scan")
+    return hashlib.sha256(_IMPLEMENTATION_SOURCE + talib.__version__.encode()
+                          + np.__version__.encode()).hexdigest()
+
+
+def enrich(result, requested, frame_minutes, *, timing_sink=None, suite_cache=None):
     """Optionally record measured descriptive work outside decision features.
 
     Durations include validation and missing/warming paths. They exclude OCaml,
     provider requests, publication and broker submission. Markets run serially.
     """
+    # SOURCE: exact implementation and installed numerical-library identities.
+    # Changing formulas/library versions invalidates all cached extensions.
+    identity = implementation_identity() if suite_cache is not None else None
     for market, original in zip(result["markets"], requested, strict=True):
         market_started = time.perf_counter() if timing_sink is not None else None
         frame_timings = {}
         for frame, minutes in frame_minutes.items():
             frame_started = time.perf_counter() if timing_sink is not None else None
             reading = market["frames"][frame]
+            key = market["venue"] + "|" + original.get("symbol", "") + "|" + frame
+            fingerprint = signature({"venue": market["venue"], "symbol": original.get("symbol", ""),
+                **original}, frame, minutes, result["asOf"], identity) if suite_cache is not None else None
+            reuse = False
             try:
-                extension = analyze_frame(original["frames"][frame], minutes, result["asOf"],
-                    original.get("expectedStarts", {}).get(frame, ()))
+                if suite_cache is not None:
+                    try:
+                        reuse = reusable(suite_cache.get(key), fingerprint, result["asOf"])
+                    except (ValueError, KeyError, TypeError):
+                        reuse = False
+                if reuse:
+                    extension = copy.deepcopy(suite_cache[key]["value"])
+                else:
+                    extension = analyze_frame(original["frames"][frame], minutes, result["asOf"],
+                        original.get("expectedStarts", {}).get(frame, ()))
             except (ValueError, KeyError, TypeError) as error:
                 extension = {"status": "invalid", "reason": str(error), "bars": [],
                              "patterns": {}, "indicators": {}, "patternEvents": [], "orderAuthority": False}
+            if suite_cache is not None and not reuse:
+                # Murphy panels are rebuilt below from ALL current frames and
+                # contexts. Never cache their previous cross-frame assertions.
+                suite_cache[key] = save(extension, fingerprint, result["asOf"])
             reading["technicalSuite"] = extension
             for warning in extension.get("divergences", []):
                 # SOURCE: historical confirmation and current evaluation are
@@ -291,7 +324,8 @@ def enrich(result, requested, frame_minutes, *, timing_sink=None):
                 warning["evaluatedAsOf"] = result["asOf"]
             if timing_sink is not None:
                 frame_timings[frame] = {"seconds": time.perf_counter() - frame_started,
-                    "inputBars": len(original["frames"][frame]), "status": extension["status"]}
+                    "inputBars": len(original["frames"][frame]), "status": extension["status"],
+                    "calculation": "reused" if reuse else "computed"}
         panels_started = time.perf_counter() if timing_sink is not None else None
         for frame, reading in market["frames"].items():
             suite = reading["technicalSuite"]

@@ -28,11 +28,12 @@ function routeFor(t: PaperTelemetry, symbol: string, venue: string, now: number)
   if (venue === "Hyperliquid HIP-3") return { name: "Public data only", reason: "No paper execution adapter. Mainnet order authority is disabled." };
   if (venue === "Alpaca crypto") {
     if (!allowed(symbol)) return { name: "Excluded crypto", reason: "Only BTC, ETH and SOL are permitted." };
-    if (canonical(symbol) === "BTC/USD") return { name: "Separate BTC engine", reason: "BTC uses quote_cross_30s_v1; these candle candidates do not route to its orderer." };
+    if (canonical(symbol) === "BTC/USD" && t.multiPaper?.legacyBtcOwner !== false)
+      return { name: "Separate BTC engine", reason: "BTC uses quote_cross_30s_v1 until its flat, reconciled ownership handoff is verified. These candle candidates do not yet route to its orderer." };
     if (!fresh(t.multiPaper?.asOf, now)) return { name: "Runtime unverified", reason: "Multiframe runtime status is absent, stale or future-dated." };
     if (t.multiPaper?.mode !== "PAPER_EXPERIMENT" || !t.multiPaper.newEntriesEnabled)
       return { name: "New entries paused", reason: "The multiframe paper runtime has new entries disabled. Existing exits and pending reconciliation are separate." };
-    return { name: "Paper entry gate enabled", reason: "ETH/SOL long candidates may reach preflight; an enabled gate is not a passed risk check or an order." };
+    return { name: "Paper entry gate enabled", reason: `${canonical(symbol)} long candidates on all five requested frames may reach the serialized paper preflight. An enabled gate is not a passed risk check or an order.` };
   }
   if (venue === "Alpaca equities") {
     const stocks = t.connections?.stocks;
@@ -88,14 +89,15 @@ function rowFor(t: PaperTelemetry, market: NonNullable<PaperTelemetry["marketPip
       detail: stockOwned ? `Owned stock quantity ${stockOwned.quantity}; managed origin ${stockOwned.frame ?? "unavailable"}.${stockOwned.pending ? " Pending stock order must reconcile." : ""} One position per instrument blocks further entries; manual positions are not adopted.` : ticket && runtimeFresh ? `An existing owned ticket on ${ticket.symbol}/${ticket.frame} blocks another entry for this instrument.${ticket.pending ? ` Pending ${ticket.pending.side} must reconcile first.` : ""}` : "This chart audit does not perform broker account, buying-power, open-order, executable-quote or ownership preflight. No pass is inferred." },
     { stage: "Broker acknowledgement", state: "context", detail: "Chart candidates have no order authority. Only an exact durable client ID joined to an actual broker order proves submission; see the new order cohort below." },
   ];
-  if (runtimeReason && market.venue === "Alpaca crypto" && canonical(market.symbol) !== "BTC/USD")
+  if (runtimeReason && market.venue === "Alpaca crypto" &&
+      (canonical(market.symbol) !== "BTC/USD" || t.multiPaper?.legacyBtcOwner === false))
     steps.push({ stage: "Latest runtime abstention", state: "blocked", detail: `${runtimeReason}. Runtime observation ${t.multiPaper?.asOf}; this is not a newly performed per-frame preflight.` });
   return { id: `${market.venue}|${market.symbol}|${frame}`, symbol: market.symbol, venue: market.venue, category: market.category, frame,
     dataState: !pipelineFresh ? "snapshot_unverified" : r?.status ?? "no_data", bar: r?.lastBarStart ?? null,
     candidate: pipelineFresh ? r?.candidate ?? null : null, route: route.name, routeReason: route.reason, steps };
 }
 
-const EVIDENCE_FIELDS = ["policy", "reason", "frame", "signal_bar", "observedAt", "quote_time", "trigger_quote_time", "reference_quote_time", "reference_bid", "reference_ask", "current_bid", "current_ask", "trigger_move_bps", "trigger_bid", "trigger_ask", "invalidation_level", "ema20", "ema50", "rsi14", "macd", "macd_signal", "trend", "candle_shapes", "bar_close"];
+const EVIDENCE_FIELDS = ["policy", "reason", "frame", "signal_bar", "observedAt", "quote_time", "trigger_quote_time", "reference_quote_time", "reference_bid", "reference_ask", "current_bid", "current_ask", "trigger_move_bps", "trigger_bid", "trigger_ask", "invalidation_level", "ema20", "ema50", "rsi14", "macd", "macd_signal", "trend", "candle_shapes", "bar_close", "input_sha256", "engine_sha256", "technical_analysis_sha256", "analysis_as_of", "frame_fetch_retrieved_at", "native_input_archive"];
 function preflightFacts(raw: Record<string, string> | undefined, submittedAt: string) {
   if (!raw?.preflight_evidence) return null;
   const observedAt=raw.preflight_observed_at ?? raw.observedAt;

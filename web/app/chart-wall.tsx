@@ -275,13 +275,17 @@ export default function ChartWall() {
   return <section className="chart-workspace" id="charts">
     <div className="chart-wall-heading"><div><span className="eyebrow">Market analysis</span><h2>{pipeline ? pipeline.markets.length * FRAMES.length : "…"} candlestick charts</h2><p>Closed candles · EMA20 / EMA50 · volume · pattern markers</p></div><div className="snapshot-time"><strong>{pipeline?.asOf.replace("T", " ") ?? "Loading market data"}</strong><small>{pipeline ? `Last scan ${number(pipeline.processingSeconds)}s · minute schedule` : "Waiting for Dublin"}</small></div></div>
     {error && <p className="alert">{error}</p>}
+    {pipeline?.incrementalAnalysis && <details className="coverage-audit"><summary>Calculation coverage for this scan</summary>
+      <p>OCaml: {pipeline.incrementalAnalysis.ocaml.computedFrames} computed · {pipeline.incrementalAnalysis.ocaml.reusedFrames} reused. Technical extension: {pipeline.incrementalAnalysis.technicalComputedFrames} computed · {pipeline.incrementalAnalysis.technicalReusedFrames} reused.</p>
+      <p>Exact native-input revisions, frame boundaries and session changes invalidate reuse. Current timestamps and cross-frame Murphy panels refresh every scan. This measures calculations, not broker executions.</p>
+    </details>}
     {coverage && <div className="coverage-strip"><span>{coverage.patternCount} candle patterns</span><span>{coverage.indicatorCount} indicator functions</span><span>{pipeline?.markets.reduce((n, m) => n + FRAMES.filter(f => !!m.frames[f].technicalSuite?.bars.length).length, 0)} charts with actual candles</span><span>10 Murphy laws: descriptive / partial</span><span>Analysis only · no order authority</span></div>}
     {pipeline && !coverage && <p className="alert">Expanded pattern scan is warming up. Chart candles will appear after the next completed scan.</p>}
     <div className="chart-filters"><label>Instrument / category<input value={search} onChange={e => setSearch(e.target.value)} placeholder="EUR, QQQ, energy…" /></label><label>Venue<select value={venue} onChange={e => setVenue(e.target.value)}>{["All venues", ...new Set(pipeline?.markets.map(m => m.venue))].map(v => <option key={v}>{v}</option>)}</select></label><label>Timeframe<select value={frame} onChange={e => setFrame(e.target.value as typeof frame)}>{["All frames", ...FRAMES].map(f => <option key={f}>{f}</option>)}</select></label><strong>{markets.length * visibleFrames.length} charts shown</strong></div>
     {!pipeline && <p className="loading">Loading the actual market snapshot…</p>}
     <div className={`chart-matrix ${frame !== "All frames" ? "single-frame" : ""}`}>
       {markets.map(m => <section className="market-chart-row" key={key(m)} aria-label={`${m.symbol} timeframe charts`}>
-        <header><strong>{m.symbol}</strong><span>{m.category} · {m.venue}</span><small>{m.execution === "analysis_only" ? "Analysis only" : "Separate BTC quote execution"}</small></header>
+        <header><strong>{m.symbol}</strong><span>{m.category} · {m.venue}</span><small>{m.execution}</small></header>
         <div className="market-chart-frames">{visibleFrames.map(f => {
           const r = m.frames[f], suite = r.technicalSuite;
           const hits = Object.entries(suite?.patterns ?? {}).filter(([, p]) => !!p.value);
@@ -312,6 +316,15 @@ export default function ChartWall() {
         {detailPipeline && <small>Detail snapshot: {detailPipeline.asOf.replace("T", " ")}</small>}
         <LargeChart suite={reading.technicalSuite} title={`${chosen.symbol} ${selected.frame}`} />
         <p className="chart-legend">Amber: EMA20 · blue: EMA50 · purple: confirmed-swing trendlines · dots: candlestick detections. Hover a candle for its patterns. Drag to pan; scroll to zoom.</p>
+        {reading.dataEvidence && <details className="coverage-audit"><summary>Recorded native-input provenance</summary>
+          <dl className="recorded-evidence"><div><dt>Native input SHA-256</dt><dd>{reading.dataEvidence.inputSha256}</dd></div>
+            <div><dt>Input bars / analyzed at</dt><dd>{reading.dataEvidence.inputBars} / {reading.dataEvidence.analysisAsOf}</dd></div>
+            <div><dt>Frame fetch received at</dt><dd>{reading.dataEvidence.frameFetchRetrievedAt ?? "Unavailable"}</dd></div>
+            <div><dt>Original input retention</dt><dd>{reading.dataEvidence.nativeInputArchive}</dd></div>
+            <div><dt>Frozen OCaml executable</dt><dd>{reading.dataEvidence.engineSha256}</dd></div>
+            <div><dt>Technical implementation</dt><dd>{reading.dataEvidence.technicalAnalysisSha256}</dd></div></dl>
+          <p>Candidate inputs are retained privately for replay. A retained candidate is not a submitted or filled order. {reading.dataEvidence.scope}.</p>
+        </details>}
         <Evidence suite={reading.technicalSuite} pipeline={detailPipeline ?? pipeline!} />
       </section>
     </div>}

@@ -101,17 +101,62 @@ class RuntimeTests(unittest.TestCase):
                     "lastBarStart": bar.isoformat().replace("+00:00", "Z"),
                     "invalidationLevel": 90, "orderAuthority": False, "winProbability": None}}}]}))
 
-    def run_engine(self, root, armed=True, new_entries=True, wind_down=False):
+    def run_engine(self, root, armed=True, new_entries=True, wind_down=False, include_btc=False, ok=True, extra_env=None):
         environment = {**os.environ, "PATH": str(root)+":"+os.environ["PATH"],
             "TZ": "UTC", "PAPER_STATE_DIR": str(root), "SYNTHETIC_OMS_DIR": str(root),
             "PAPER_ORDERS": "1", "MULTI_PAPER_ORDERS": "1" if armed else "0",
             "MULTI_PAPER_NEW_ENTRIES": "1" if new_entries else "0",
             "MULTI_PAPER_WIND_DOWN_EXCLUDED": "1" if wind_down else "0",
+            "MULTI_PAPER_INCLUDE_BTC": "1" if include_btc else "0",
             "APCA_API_KEY_ID": "SYNTHETIC", "APCA_API_SECRET_KEY": "SYNTHETIC"}
+        environment.update(extra_env or {})
         result = subprocess.run([str(ENGINE), "--execute"], env=environment,
                                 capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode == 0, ok, result.stderr)
+        if not ok:
+            return result
         return json.loads((root / "multi-paper.json").read_text())
+
+    def test_btc_requires_exclusive_handoff_and_never_adopts_legacy_inventory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=self.setup_fixture(directory, symbol='BTC/USD')
+            path=root/'market-pipeline.json'; doc=json.loads(path.read_text())
+            doc['markets'][0]['symbol']='BTC/USD';path.write_text(json.dumps(doc))
+            self.run_engine(root)
+            self.assertEqual(self.posts(root), [])
+            self.run_engine(root,include_btc=True,ok=False)
+            marker={'owner':'multi-frame','verifiedBrokerFlat':True,'legacyPendingClear':True}
+            (root/'btc-multiframe-owner.json').write_text(json.dumps(marker))
+            for file in ['pending','owned']:
+                (root/file).write_text('legacy state')
+                self.run_engine(root,include_btc=True,ok=False)
+                self.assertEqual(self.posts(root),[])
+                (root/file).unlink()
+            self.update_broker(root,position='0.2')
+            self.run_engine(root,include_btc=True)
+            self.assertEqual(self.posts(root),[])
+            self.update_broker(root,position='0')
+            self.run_engine(root,include_btc=True)
+            self.assertEqual(len(self.posts(root)),1)
+            self.assertEqual(self.posts(root)[0]['symbol'],'BTC/USD')
+            self.run_engine(root,include_btc=True)
+            self.assertEqual(len(self.posts(root)),1)
+            self.run_engine(root,ok=False)
+            self.update_broker(root,bid=89,ask=89.1)
+            self.run_engine(root,include_btc=True,new_entries=False)
+            self.assertEqual(self.posts(root)[-1]['side'],'sell')
+
+    def test_quote_expiring_during_real_durable_event_write_never_reaches_http(self):
+        import durable_delay
+        with tempfile.TemporaryDirectory() as directory:
+            root=self.setup_fixture(directory)
+            result=self.run_engine(root,extra_env=durable_delay.environment(root,'multi-paper-events.jsonl'))
+            self.assertEqual(self.posts(root),[])
+            self.assertEqual(result['activeTickets'],[])
+            events=[json.loads(line) for line in (root/'multi-paper-events.jsonl').read_text().splitlines()]
+            self.assertEqual([row['kind'] for row in events],['DECISION','NOT_SENT'])
+            self.run_engine(root)
+            self.assertEqual(self.posts(root),[])
 
     def posts(self, root):
         path = root / "posts.jsonl"

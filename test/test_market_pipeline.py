@@ -17,6 +17,40 @@ NOW = datetime(2026, 10, 1, 12, 1, tzinfo=timezone.utc)
 
 
 class PipelineTests(unittest.TestCase):
+    def test_snapshot_encoding_preserves_actual_bytes_and_rejects_invalid_replacement(self):
+        from market_pipeline import atomic
+        import json
+        document = {"unicode": "EUR / €", "rows": [ROW], "missing": None}
+        legacy = io.StringIO()
+        json.dump(document, legacy, separators=(",", ":"), allow_nan=False)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "snapshot.json"
+            atomic(path, document)
+            self.assertEqual(path.read_bytes(), (legacy.getvalue()+"\n").encode())
+            with self.assertRaises(ValueError):
+                atomic(path, {"price": float("nan")})
+            self.assertEqual(json.loads(path.read_text()), document)
+            self.assertFalse(path.with_suffix(".tmp").exists())
+
+    def test_missing_and_old_sparse_products_do_not_force_warm_products_to_reseed(self):
+        from market_pipeline import history_batches, SEED_BARS
+        from datetime import timedelta
+        # SOURCE: synthetic retained histories use actual scanner seed length.
+        venue="Alpaca equities"; seed=NOW-timedelta(days=1)
+        recent=[{**ROW,"t":"2026-10-01T12:00:00Z"} for _ in range(SEED_BARS)]
+        older=[{**ROW,"t":"2026-09-30T19:55:00Z"} for _ in range(SEED_BARS)]
+        markets={venue+"|QQQ":{"frames":{"1m":recent}},
+                 venue+"|FXB":{"frames":{"1m":[]}},
+                 venue+"|FXF":{"frames":{"1m":older}}}
+        batches=history_batches(["QQQ","FXB","FXF"],markets,venue,"1m",seed)
+        projected={tuple(symbols):start for symbols,start in batches}
+        self.assertEqual(projected[("QQQ",)],datetime(2026,10,1,12,tzinfo=timezone.utc))
+        self.assertEqual(projected[("FXB",)],seed)
+        self.assertEqual(projected[("FXF",)],datetime(2026,9,30,19,55,tzinfo=timezone.utc))
+        markets[venue+"|SPY"]={"frames":{"1m":[{**r,"t":"2026-10-01T11:59:00Z"} for r in recent]}}
+        grouped=history_batches(["QQQ","SPY"],markets,venue,"1m",seed)
+        self.assertEqual(grouped,[(["QQQ","SPY"],datetime(2026,10,1,11,59,tzinfo=timezone.utc))])
+
     def test_used_analyzer_identity_and_replacement_during_actual_invocation_fail_closed(self):
         from market_pipeline import analyze_fingerprinted
         import hashlib

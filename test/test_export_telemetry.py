@@ -30,6 +30,22 @@ from export_telemetry import (  # noqa: E402
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_native_input_projection_retains_hashes_without_private_files_or_inventing_old_proof(self):
+        import hashlib
+        from export_telemetry import native_input_evidence
+        # SOURCE: synthetic deterministic SHA-256 values, no actual order claim.
+        sha=hashlib.sha256(b"synthetic input").hexdigest()
+        proof={"schema":"native_closed_frame_input_v1","inputSha256":sha,"engineSha256":sha,
+            "technicalAnalysisSha256":sha,"analysisAsOf":"2026-10-05T13:31:00Z",
+            "nativeInputArchive":"retained","orderAuthority":False,
+            "privateFile":"/private/state/secret.json","secret":"never export"}
+        projected=native_input_evidence({"dataEvidence":proof})
+        self.assertEqual(projected["input_sha256"],sha)
+        self.assertEqual(projected["native_input_archive"],"retained")
+        self.assertNotIn("private",json.dumps(projected)); self.assertNotIn("secret",json.dumps(projected))
+        self.assertEqual(native_input_evidence({}),{})
+        self.assertEqual(native_input_evidence({"dataEvidence":{**proof,"inputSha256":"fake"}}),{})
+
     def test_separate_session_protocol_is_pinned_and_exposes_only_checked_per_frame_counts(self):
         import hashlib
         from datetime import timedelta
@@ -149,6 +165,29 @@ class DecisionHistoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             with patch("export_telemetry.subprocess.run",return_value=subprocess.CompletedProcess([],0)):
                 service_state({"AI_OCAML_CAPTURE_SERVICE":"--invalid.service"})
+
+    def test_retired_legacy_process_does_not_hide_a_healthy_paper_scheduler(self):
+        import subprocess
+        from datetime import timedelta
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            path=root/'multi-paper.json'
+            credentials={'PAPER_ORDERS':'1','AI_OCAML_MULTI_PAPER_TIMER':'configured-paper.timer'}
+            def status(args, **kwargs):
+                return subprocess.CompletedProcess(args,0 if args[-1]=='configured-paper.timer' else 1)
+            for stamp, mode, expected in [
+                (datetime.now(timezone.utc).isoformat(),'PAPER_EXPERIMENT','PAPER_ORDER'),
+                (datetime.now(timezone.utc).isoformat(),'OBSERVE','MONITOR'),
+                ((datetime.now(timezone.utc)-timedelta(days=1)).isoformat(),'PAPER_EXPERIMENT','STOPPED'),
+                ((datetime.now(timezone.utc)+timedelta(days=1)).isoformat(),'PAPER_EXPERIMENT','STOPPED'),
+                ('invalid','PAPER_EXPERIMENT','STOPPED'),
+            ]:
+                path.write_text(json.dumps({'asOf':stamp,'mode':mode}))
+                with patch('export_telemetry.STATE_DIR',root),patch('export_telemetry.subprocess.run',side_effect=status):
+                    result=service_state(credentials)
+                self.assertEqual(result['mode'],expected)
+                self.assertEqual(result['active'],expected!='STOPPED')
+                self.assertNotIn('configured-paper.timer',json.dumps(result))
 
     def test_stock_scope_requires_owned_namespace_and_keeps_aapl_private(self):
         rows=[{"id":"owned","client_order_id":"aibotstkExample","symbol":"QQQ","asset_class":"us_equity"},
