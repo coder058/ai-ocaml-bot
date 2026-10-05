@@ -41,7 +41,7 @@ class PipelineTests(unittest.TestCase):
     def test_native_primary_requests_use_documented_budget_without_intraday_key_error(self):
         # SOURCE: synthetic 52-week ranges validate default weight 20 +
         # ceil(estimated maximum rows / documented 60), no network calls.
-        for interval, expected in (("1w", 21), ("1d", 27)):
+        for interval, expected in (("1w", 21), ("1d", 27), ("1M", 21)):
             with patch("market_pipeline.HL_BUDGET.acquire") as acquire, patch("market_pipeline.urllib.request.urlopen", return_value=io.StringIO("[]")) as transport:
                 result = request(HL_INFO, body={"type":"candleSnapshot", "req":{
                     "coin":"xyz:EUR", "interval":interval, "startTime":0,

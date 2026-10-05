@@ -144,11 +144,12 @@ function LargeChart({ suite, title }: { suite: TechnicalSuite | undefined; title
 function PrimaryContextEvidence({ value }: { value: unknown }) {
   const context = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const frames = context.frames && typeof context.frames === "object" ? context.frames as Record<string, Record<string, unknown>> : {};
+  const providerBlock = context.source === "Hyperliquid public native candles" || frames.Native1M != null;
   return <div className="primary-context">
-    <p><strong>Native daily / weekly / monthly context</strong><br />{evidenceText(context.source)} · received {evidenceText(context.retrievedAt)}</p>
-    <div className="primary-context-frames">{["1Day", "1Week", "1Month"].map(frame => {
+    <p><strong>Native daily / weekly / {providerBlock ? "provider 1M" : "monthly"} context</strong><br />{evidenceText(context.source)} · received {evidenceText(context.retrievedAt)}</p>
+    <div className="primary-context-frames">{["1Day", "1Week", providerBlock ? "Native1M" : "1Month"].map(frame => {
       const reading = frames[frame] ?? {};
-      return <article key={frame}><header><strong>{frame === "1Day" ? "Daily" : frame === "1Week" ? "Weekly" : "Monthly"}</strong><span>{evidenceText(reading.status ?? "unavailable")}</span></header>
+      return <article key={frame}><header><strong>{frame === "1Day" ? "Daily" : frame === "1Week" ? "Weekly" : frame === "Native1M" ? reading.periodKind === "fixed_30_day_epoch_grid" ? "Native 30-day · 1M" : "Provider 1M" : "Monthly"}</strong><span>{evidenceText(reading.status ?? "unavailable")}</span></header>
         <dl><div><dt>Trend</dt><dd>{evidenceText(reading.trend)}</dd></div>
           <div><dt>Closed / consecutive bars</dt><dd>{evidenceText(reading.closedBars)} / {evidenceText(reading.contiguousBars)}</dd></div>
           <div><dt>EMA20 / EMA50</dt><dd>{evidenceText(reading.ema20)} / {evidenceText(reading.ema50)}</dd></div>
@@ -160,7 +161,7 @@ function PrimaryContextEvidence({ value }: { value: unknown }) {
         {reading.retrievedAt != null && <p>Received {evidenceText(reading.retrievedAt)} · as of {evidenceText(reading.asOf)}</p>}
       </article>;
     })}</div>
-    <p className="analysis-limit">Historical data as retrieved, not a point-in-time backtest. Each provider's native period boundary is shown above; open periods are withheld. Monthly equity prices are split-adjusted as retrieved, while daily/weekly remain raw. No retrospective corporate-action knowledge, trade authority or win probability.</p>
+    <p className="analysis-limit">Historical data as retrieved, not a point-in-time backtest. Each provider's native period boundary is shown above; open periods are withheld. {providerBlock ? "Hyperliquid 1M is a validated 30-day epoch block, not an Alpaca calendar month. Missing EMA50 history stays warming." : "Monthly equity prices are split-adjusted as retrieved, while daily/weekly remain raw."} No retrospective corporate-action knowledge, trade authority or win probability.</p>
     <p>{evidenceText(context.missing)}</p>
     {Array.isArray(context.errors) && context.errors.length > 0 && <p>Retrieval errors: {evidenceText(context.errors)}</p>}
   </div>;

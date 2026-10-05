@@ -4,8 +4,9 @@ The minute scanner now also retrieves native `1Day`, `1Week` and `1Month` bars f
 actually monitored Alpaca stocks/ETF and BTC/ETH/SOL. It attaches the same
 instrument's primary context to each of its five intraday Murphy panels.
 These are additional time scales, not additional broker products or orders.
-Hyperliquid daily/weekly history uses its separate public adapter; monthly
-HIP-3 history remains unavailable. Murphy law 1 remains **partial**: context
+Hyperliquid daily/weekly history uses its separate public adapter, with native
+`1M` **30-day epoch blocks** added separately from Alpaca calendar months.
+Calendar-month HIP-3 history remains unavailable. Murphy law 1 remains **partial**: context
 availability alone does not complete trend confirmation or book methodology.
 
 ## Data and causality
@@ -48,7 +49,9 @@ observation and a leading-period allowance; every returned bar is validated.
 
 The hourly refresh is an **UNCALIBRATED GUESS** for limiting read-only REST
 work. It runs inside the serialized existing scanner and caches summaries,
-without adding an order process or spending Hyperliquid REST budget. A cache
+without adding an order process. The Alpaca collector does not spend Hyperliquid
+REST budget; the separate HIP-3 collector reserves its actual native requests
+through the shared public-data budget. A cache
 cannot be reused with a future retrieval time or a changed instrument scope.
 Errors, missing/warming/stale periods and original reception timestamps remain
 visible. All primary context carries `orderAuthority=false` and
@@ -86,3 +89,36 @@ monthly start/closure were 2026-09-01T04:00:00Z / 2026-10-01T04:00:00Z; October
 was withheld. Browser QQQ 1h showed actual EMA20/50, receipt and split adjustment
 beside separately identified raw daily/weekly context. This is descriptive
 as-retrieved information, not validation of a trading policy.
+
+## Hyperliquid native `1M` verification — 5 October 08:03 UTC
+
+Two actual public `candleSnapshot` probes at 07:46:27 UTC for `xyz:EUR` and
+`xyz:XYZ100` returned 11 and 13 rows including the current open block. Their
+native boundaries were August 5, September 4, October 4 and November 3 UTC:
+exact 30-day Unix epoch blocks, not calendar-month starts. Official interval
+support: [Hyperliquid info endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint).
+The adapter validates every instrument, interval, grid and inclusive end;
+open periods are withheld and gaps reset warmup. The separate `Native1M` key
+prevents accidental comparison with Alpaca `1Month` semantics.
+
+The existing serialized collector seeds one instrument per scan, now with
+three budgeted native requests. This cadence remains an explicitly uncalibrated
+operational choice, not a throughput guarantee. Older two-interval caches are
+eligible for an actual new attempt; failures retain old receipts and the normal
+retry cadence. The 52-block range reuses the existing EMA50 plus preceding and
+leading-period allowance, not a measured strategy parameter.
+
+Actual cache at 08:03: 11 of 19 monitored instruments had received `Native1M`;
+all were warming. EUR had ten consecutive closed blocks and XYZ100 twelve,
+last starting September 4 and closing October 4. EMA50 was unavailable. These
+are actual short listing histories, not an implementation failure to synthesize
+missing years. Calendar-month HIP-3 context and full Murphy confirmation remain
+incomplete. No broker execution or policy activation was added.
+
+Ten adapter tests passed locally and on Dublin, nine pipeline and nine Murphy
+regressions on Dublin; 45 frontend tests and production build/typecheck passed.
+Browser EUR 1h verified the actual native dates, individual receipt, unavailable
+EMA20/50 and explicit 30-day label. Proof `.local/hip3-native-30day-proof.png`.
+The stock protocol's compiled analyzer and frozen candidate rule are unchanged;
+its Python source fingerprints record initial provenance, not an attestation
+that every later auxiliary transport change has the same source bytes.

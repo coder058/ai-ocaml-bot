@@ -1521,6 +1521,9 @@ footer {
 .chart-filters { position: sticky; top: 0; z-index: 2; background: #090e13f5; border: 1px solid var(--line); border-radius: 7px; padding: 12px; display: flex; align-items: end; flex-wrap: wrap; gap: 14px; margin-bottom: 20px; }
 .chart-filters label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
 .chart-filters input, .chart-filters select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+/* SOURCE: a native select's intrinsic width exceeded its mobile filter label;
+   contain it within the actual allocated label, without hiding options. */
+.chart-filters select { max-width: 100%; min-width: 0; }
 .chart-filters strong { margin-left: auto; align-self: center; color: var(--soft); font-size: 12px; }
 .market-chart-row { margin-bottom: 24px; content-visibility: auto; contain-intrinsic-size: auto 280px; }
 .market-chart-row > header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }

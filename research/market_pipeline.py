@@ -73,7 +73,10 @@ HL_BASE_WEIGHT = 20
 HL_ROWS_PER_WEIGHT = 60
 # SOURCE: Hyperliquid candleSnapshot supports native daily/weekly bars. Keep
 # transport durations separate from the user's five analyzed intraday frames.
-HL_NATIVE_MINUTES = {name:minutes for name,(minutes,_) in FRAMES.items()} | {"1d":24*60,"1w":7*24*60}
+HL_NATIVE_MINUTES = {name:minutes for name,(minutes,_) in FRAMES.items()} | {"1d":24*60,"1w":7*24*60,
+    # SOURCE: actual provider 1M t/T observed 2026-10-05: 30-day epoch blocks,
+    # not calendar months. Used for documented request-weight reservation.
+    "1M":30*24*60}
 # SOURCE: Alpaca documents a maximum of 10,000 total bars per response page.
 ALPACA_PAGE_LIMIT = 10_000
 # SOURCE: US stock exchange calendar sessions are expressed in New York time.
@@ -441,7 +444,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
                 "orderAuthority": False, "winProbability": None,
                 "confirmation": "Current public context unavailable; no historical OI confirmation"})
         market["primaryContext"] = ({**hip3_primary_context.get("markets", {}).get(market["symbol"], {}),
-            "missing": "Monthly history; public native daily/weekly context seeds one instrument per scan and may be warming.",
+            "missing": "Public daily/weekly/native 1M context seeds one instrument per scan and may be warming. Provider 1M is a 30-day block, not calendar-month history.",
             "orderAuthority": False, "winProbability": None}
             if market["venue"] == "Hyperliquid HIP-3" else {**primary_context.get("markets", {}).get(key, {}),
             "asOf": primary_context.get("asOf"), "retrievedAt": primary_context.get("retrievedAt"),

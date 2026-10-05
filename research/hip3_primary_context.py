@@ -4,22 +4,27 @@ Provider: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/inf
 Actual xyz:EUR and xyz:XYZ100 weekly responses observed 2026-10-05 use the
 Unix epoch grid (Thursday UTC), unlike Alpaca's Monday weekly boundary.
 Each row must validate that grid and its inclusive provider end timestamp.
+Actual 1M responses use fixed 30-day epoch blocks, not calendar months.
 """
 from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
 
-from primary_trend_context import EMA_WINDOWS, HISTORY_WEEKS, REFRESH_SECONDS, ema, instant, utc
+from primary_trend_context import EMA_WINDOWS, HISTORY_WEEKS, HISTORY_MONTHS, REFRESH_SECONDS, ema, instant, utc
 
 # SOURCE: supported native intervals and UTC duration observed in actual
 # provider t/T fields. Weekly alignment is checked, never shifted to Monday.
-PERIOD_MS = {"1d": 24 * 60 * 60 * 1_000, "1w": 7 * 24 * 60 * 60 * 1_000}
-DISPLAY_INTERVAL = {"1d": "1Day", "1w": "1Week"}
+PERIOD_MS = {"1d": 24 * 60 * 60 * 1_000, "1w": 7 * 24 * 60 * 60 * 1_000,
+             # SOURCE: actual xyz:EUR/xyz:XYZ100 1M t/T on 2026-10-05:
+             # Sep4-Oct4-Nov3 UTC, exactly 30-day Unix epoch blocks. This
+             # provider interval is NOT a calendar month like Alpaca 1Month.
+             "1M": 30 * 24 * 60 * 60 * 1_000}
+DISPLAY_INTERVAL = {"1d": "1Day", "1w": "1Week", "1M": "Native1M"}
 INFO_ORIGIN = "https://api.hyperliquid.xyz/info"  # SOURCE: official public info origin.
 VENUE = "Hyperliquid HIP-3"
-# GUESS: # UNCALIBRATED GUESS — fetch at most one instrument (two native
-# requests) per serialized scan to avoid a 38-request bootstrap burst. Measure
+# GUESS: # UNCALIBRATED GUESS — fetch at most one instrument (three native
+# requests) per serialized scan to avoid a full-universe bootstrap burst. Measure
 # scanner latency and coverage before changing this operational scheduling.
 SYMBOLS_PER_SCAN = 1
 
@@ -72,7 +77,11 @@ def summarize(rows, symbol, interval, start, as_of):
             "lastBarClosedAt": timestamp(previous + period) if previous is not None else None,
             "expectedLatestBarAt": timestamp(latest_expected), "close": tail[-1] if tail else None,
             "ema20": fast, "ema50": slow, "trend": trend,
-            "closure": "next UTC midnight" if interval == "1d" else "next native Thursday 00:00 UTC (validated Unix epoch grid)",
+            "closure": ("next 30-day boundary on the validated Unix epoch grid; not a calendar month" if interval == "1M"
+                else "next UTC midnight" if interval == "1d" else "next native Thursday 00:00 UTC (validated Unix epoch grid)"),
+            "periodKind": "fixed_30_day_epoch_grid" if interval == "1M" else "fixed_native_epoch_grid",
+            "source": "Hyperliquid public native candleSnapshot " + interval,
+            "adjustment": "not_applicable", "knowledge": "historical_as_retrieved_not_point_in_time",
             "orderAuthority": False, "winProbability": None}
 
 
@@ -97,20 +106,26 @@ def collect(request, universes, as_of, previous=None):
             return elapsed if elapsed >= 0 else math.inf
         except (KeyError, ValueError, TypeError):
             return math.inf
-    due = [s for s in symbols if age(markets[s], "lastAttemptAt") >= REFRESH_SECONDS]
+    # SOURCE: an earlier two-interval cache is not evidence of a 1M request.
+    # Record attempted interval schema even on failure, retaining retry cadence.
+    due = [s for s in symbols if age(markets[s], "lastAttemptAt") >= REFRESH_SECONDS
+           or markets[s].get("intervalsAttempted") != list(PERIOD_MS)]
     # Oldest real attempt first; dict order breaks ties, including initial seed.
     due.sort(key=lambda s: age(markets[s], "lastAttemptAt"), reverse=True)
     for symbol in due[:SYMBOLS_PER_SCAN]:
         old = markets[symbol]
         entry = {**old, "lastAttemptAt": utc(as_of), "errors": [],
                  "source": "Hyperliquid public native candles", "knowledge": "historical_as_retrieved_not_point_in_time",
-                 "missing": "Monthly history; short histories may not warm EMA50. Public perpetual data, no spot FX or execution adapter.",
+                 "intervalsAttempted": list(PERIOD_MS),
+                 "missing": "Provider 1M is a native 30-day block, not a calendar month; short histories may not warm EMA50. Public perpetual data, no spot FX or execution adapter.",
                  "orderAuthority": False, "winProbability": None}
         frames = dict(old.get("frames", {}))
         for interval, period in PERIOD_MS.items():
-            # SOURCE: same EMA50 history allowance as the Alpaca collector.
+            # SOURCE: existing EMA50 previous/leading allowance, applied to
+            # native 30-day blocks for 1M and the unchanged weekly range otherwise.
             upper = milliseconds(as_of)
-            start = upper // period * period - HISTORY_WEEKS * PERIOD_MS["1w"]
+            start = upper // period * period - (HISTORY_MONTHS * period if interval == "1M"
+                                               else HISTORY_WEEKS * PERIOD_MS["1w"])
             try:
                 rows = request(INFO_ORIGIN, body={"type": "candleSnapshot", "req": {
                     "coin": symbol, "interval": interval, "startTime": start, "endTime": upper}})
