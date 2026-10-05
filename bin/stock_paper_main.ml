@@ -196,8 +196,9 @@ let run () =
         journal "DECISION" ticker cid reason (if evidence=`Null then Yojson.Safe.from_string body else evidence);
         (* SOURCE: durable intent/event fsync can outlive the quote or closed
            bar used by preflight. Recheck immediately before network submission. *)
-        let boundary_now=Unix.gettimeofday () in
-        let boundary_valid=if evidence=`Null then true else
+        let boundary_valid () =
+          let boundary_now=Unix.gettimeofday () in
+          if evidence=`Null then true else
           let quote_time=Option.bind (field "preflight" evidence) (field "quoteTime") in
           let quote_at=Option.bind (Paper_broker.string quote_time) Stock_policy.timestamp in
           let quote_fresh=match quote_at with Some at ->
@@ -207,19 +208,24 @@ let run () =
             | Ok signals->List.exists (fun (s:Stock_policy.signal)->Stock_policy.entry_id s=cid) signals
             | Error _->false in
           quote_fresh && signal_current in
-        if not boundary_valid then (
+        let not_sent reason =
           let rejected=replace "state" (`String "rejected")
-            (replace "brokerError" (`String "Not submitted: quote or candidate expired during durable writes") row) in
+            (replace "brokerError" (`String ("Not submitted: " ^ reason)) row) in
           orders:=List.map (fun entry->if get_string "clientOrderId" entry=cid then rejected else entry) !orders;
           save !orders;
-          journal "NOT_SENT" ticker cid "quote or candidate expired during durable writes" evidence)
-        else match Paper_stock_broker.submit ~asset ~side ~amount ~client_order_id:cid with
+          journal "NOT_SENT" ticker cid reason evidence in
+        if not (boundary_valid ()) then
+          not_sent "quote or candidate expired during durable writes"
+        else match Execution_proof.Stock_submit.submit ~asset ~side ~amount ~client_order_id:cid
+          ~pre_submit:(fun () -> if boundary_valid () then Ok () else
+            Error "quote or candidate expired during final session validation") with
         | Ok broker ->
           validate_broker row broker;
           let updated=replace "state" (`String (if terminal broker then "resolved" else "pending")) (replace "broker" broker row) in
           orders:=List.map (fun row->if get_string "clientOrderId" row=cid then updated else row) !orders;
           save !orders;journal "ACK" ticker cid reason broker
-        | Error error ->
+        | Error (`Not_sent reason) -> not_sent reason
+        | Error (`Broker error) ->
           (* SOURCE: explicit request rejection statuses; other errors retain the durable ID. *)
           if List.exists (fun prefix->String.starts_with ~prefix error) ["HTTP 400:";"HTTP 403:";"HTTP 422:"] then (
             let rejected=replace "state" (`String "rejected") (replace "brokerError" (`String error) row) in

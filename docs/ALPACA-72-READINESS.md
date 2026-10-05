@@ -228,3 +228,18 @@ The actual SOL exit is present in the localhost execution API with broker fill
 and exact recorded reason. New entries remain disabled. Inspect final stock
 session-read/freshness timing, broker stops and actual automatic stock lifecycle
 before enabling a paper-entry profile. Broader AI/FX/evaluation scope is unchanged.
+
+
+## Final stock submission boundary — 14:53 UTC
+
+The current stock router now rechecks quote/candidate evidence after the final
+session HTTP read and immediately before application-level POST. Certain
+pre-POST failures record NOT_SENT instead of leaving a never-submitted intent
+uncertain. Ten stock router and thirteen scheduler regressions passed, including
+slow/closed final-session cases. This closes the identified application boundary
+gap; broker arrival timing, resting stops, actual automatic stock lifecycle and
+full portfolio risk still need proof before arming.
+
+At 14:50, 273 slots were ready/candidate, 53 warming, 30 stale and four without
+closed candles. All 360 represented slots are not all execution-ready. New
+entries remain disabled. Paper tests/results do not establish live profitability.

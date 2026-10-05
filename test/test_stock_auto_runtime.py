@@ -96,6 +96,32 @@ class StockAutoRuntime(unittest.TestCase):
             self.run_auto(root)
             self.assertEqual(self.posts(root),[])
 
+    def test_quote_expiring_during_final_session_read_is_certain_not_sent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=self.fixture(directory,delay_final_session=True);self.analysis(root)
+            self.run_auto(root)
+            self.assertEqual(self.posts(root),[])
+            rows=json.loads((root/'stock-paper-ledger.json').read_text())['orders']
+            self.assertEqual(rows[0]['state'],'rejected')
+            events=[json.loads(line) for line in (root/'stock-paper-events.jsonl').read_text().splitlines()]
+            self.assertEqual([row['kind'] for row in events],['DECISION','NOT_SENT'])
+            self.assertIn('final session validation',events[-1]['reason'])
+            self.run_auto(root)
+            self.assertEqual(self.posts(root),[])
+
+    def test_closed_final_session_cannot_leave_a_never_submitted_order_uncertain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=self.fixture(directory,close_final_session=True);self.analysis(root)
+            self.run_auto(root)
+            self.assertEqual(self.posts(root),[])
+            rows=json.loads((root/'stock-paper-ledger.json').read_text())['orders']
+            self.assertEqual(rows[0]['state'],'rejected')
+            events=[json.loads(line) for line in (root/'stock-paper-events.jsonl').read_text().splitlines()]
+            self.assertEqual([row['kind'] for row in events],['DECISION','NOT_SENT'])
+            self.assertIn('session is closed',events[-1]['reason'])
+            self.run_auto(root)
+            self.assertEqual(self.posts(root),[])
+
     def test_missing_or_changed_original_candle_proof_blocks_automatic_http(self):
         for remove in (True,False):
             with self.subTest(remove=remove),tempfile.TemporaryDirectory() as directory:

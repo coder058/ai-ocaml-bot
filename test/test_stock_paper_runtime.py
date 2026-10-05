@@ -53,7 +53,16 @@ if '/orders:by_client_order_id?' in url:
  finish(d['orders'][k])
 if url.endswith('/v2/account'):finish({'status':'ACTIVE','trading_blocked':False,
  'crypto_status':'INACTIVE','non_marginable_buying_power':'100000'})
-if url.endswith('/v2/clock'):finish({'is_open':d.get('open',True),'next_open':'synthetic calendar'})
+if url.endswith('/v2/clock'):
+ ledger=r/'stock-paper-ledger.json'
+ pending=ledger.exists() and any(x.get('state')=='pending' for x in json.loads(ledger.read_text())['orders'])
+ if pending and d.get('delay_final_session'):
+  # SOURCE: synthetic six-second stall exceeds the inherited five-second
+  # quote guard. It occurs after actual durable intent, before any HTTP POST.
+  import time
+  time.sleep(6)
+ opened=d.get('open',True) and not (pending and d.get('close_final_session'))
+ finish({'is_open':opened,'next_open':'synthetic calendar'})
 if url.endswith('/v2/assets/QQQ'):finish({'symbol':'QQQ','class':'us_equity','status':'active','tradable':True,'fractionable':True})
 if url.endswith('/v2/positions'):
  rows=[{'symbol':'AAPL','side':'long','qty':'100'}]
