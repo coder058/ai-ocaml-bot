@@ -239,6 +239,13 @@ let run ~execute () =
     | _ -> ()) (Multi_paper.active_tickets !state);
   List.iter (fun (signal : Multi_paper.signal) ->
     if Multi_paper.eligible !state signal then
+      match Execution_proof.Native_inputs.verify ~state_dir
+        ~as_of:(Option.value ~default:"" (Paper_broker.string (Paper_broker.member "asOf" document)))
+        ~venue:"Alpaca crypto" ~symbol:signal.symbol ~frame:signal.frame ~reading:signal.reading with
+      | Error error -> failure signal.symbol error
+      | Ok proof ->
+      let signal={signal with reading=(match signal.reading with
+        | `Assoc fields->`Assoc (("nativeInputVerification",proof)::fields)|value->value)} in
       match preflight signal.symbol with
       | Some (_,qty,_) when qty <> 0. ->
         failure signal.symbol "Existing inventory is not owned by this experiment"

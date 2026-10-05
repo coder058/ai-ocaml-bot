@@ -97,7 +97,7 @@ function rowFor(t: PaperTelemetry, market: NonNullable<PaperTelemetry["marketPip
     candidate: pipelineFresh ? r?.candidate ?? null : null, route: route.name, routeReason: route.reason, steps };
 }
 
-const EVIDENCE_FIELDS = ["policy", "reason", "frame", "signal_bar", "observedAt", "quote_time", "trigger_quote_time", "reference_quote_time", "reference_bid", "reference_ask", "current_bid", "current_ask", "trigger_move_bps", "trigger_bid", "trigger_ask", "invalidation_level", "ema20", "ema50", "rsi14", "macd", "macd_signal", "trend", "candle_shapes", "bar_close", "input_sha256", "engine_sha256", "technical_analysis_sha256", "analysis_as_of", "frame_fetch_retrieved_at", "native_input_archive"];
+const EVIDENCE_FIELDS = ["policy", "reason", "frame", "signal_bar", "observedAt", "quote_time", "trigger_quote_time", "reference_quote_time", "reference_bid", "reference_ask", "current_bid", "current_ask", "trigger_move_bps", "trigger_bid", "trigger_ask", "invalidation_level", "ema20", "ema50", "rsi14", "macd", "macd_signal", "trend", "candle_shapes", "bar_close", "input_sha256", "engine_sha256", "technical_analysis_sha256", "analysis_as_of", "frame_fetch_retrieved_at", "native_input_archive", "native_input_verified", "native_input_verified_at", "native_input_replay_seconds"];
 function preflightFacts(raw: Record<string, string> | undefined, submittedAt: string) {
   if (!raw?.preflight_evidence) return null;
   const observedAt=raw.preflight_observed_at ?? raw.observedAt;

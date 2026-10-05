@@ -14,6 +14,21 @@ const fixture = () => ({ generatedAt: at, orders: [], fills: [], positions: [], 
   multiPaper: { asOf: at, mode: "PAPER_EXPERIMENT", newEntriesEnabled: false, activeTickets: [], abstentions: [] },
   connections: { stocks: { asOf: at, connected: true, sessionOpen: false, nextOpen: "2026-10-05T09:30:00-04:00", automaticStrategy: false, executionGateArmed: false }, fx: { connected: false, reason: "practice_credentials_missing", executionAdapterAvailable: false, accountId: "PRIVATE" } } });
 
+test("native replay evidence is retained only through an exact prior broker join",()=>{
+  const t=fixture();
+  t.orders=[{id:'native',clientOrderId:'jsbotmtfNative',symbol:'ETHUSD',side:'buy',
+    status:'filled',filledQty:'1',submittedAt:at}];
+  t.decisionHistory={native:{policy:'trend_candle_confluence_v1',observedAt:'2026-10-04T19:59:29.500Z',
+    native_input_verified:'True',native_input_verified_at:'2026-10-04T19:59:28Z',
+    native_input_replay_seconds:'0.05',rawNativeInput:'PRIVATE'}};
+  const evidence=executionView(t,now).orders[0].evidence;
+  assert.equal(evidence.native_input_verified,'True');
+  assert.equal(evidence.native_input_replay_seconds,'0.05');
+  assert.equal(JSON.stringify(evidence).includes('PRIVATE'),false);
+  t.decisionHistory.native.observedAt='2026-10-04T20:00:01Z';
+  assert.equal(executionView(t,now).orders[0].evidence,null);
+});
+
 test("all 455 cells distinguish the separate BTC engine, paused entries, stocks and public-only HIP-3", () => {
   const t = fixture();
   const result = executionView(t, now);

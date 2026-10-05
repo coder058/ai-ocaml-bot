@@ -23,20 +23,12 @@ class StockAutoRuntime(unittest.TestCase):
     update = stock_runtime.StockRuntime.update
 
     def analysis(self, root, symbol='QQQ', venue='Alpaca equities', **changes):
-        now = datetime.now(timezone.utc)
-        minute = now.replace(second=0, microsecond=0)
-        # SOURCE: a four-hour fixture avoids a minute rollover during real
-        # subprocess tests; pure policy tests cover all five frame boundaries.
-        frame_start = now.replace(hour=now.hour//4*4, minute=0, second=0, microsecond=0)-timedelta(hours=4)
-        stamp = lambda at: at.isoformat().replace('+00:00', 'Z')
-        reading = {'status': 'candidate', 'candidate': 'long', 'trend': 'rising',
-                   'candleShapes': ['hammer_shape'], 'close': 100, 'invalidationLevel': 99,
-                   'lastBarStart': stamp(frame_start),
-                   'orderAuthority': False, 'winProbability': None}
+        from native_input_fixture import document
+        # SOURCE: four-hour fixture avoids minute rollover; all five native
+        # routing boundaries are separately covered by pure policy tests.
+        doc = document(root, symbol, venue, '4h')
+        reading = doc['markets'][0]['frames']['4h']
         reading.update(changes)
-        doc = {'policy': 'trend_candle_confluence_v1', 'asOf': stamp(minute),
-               'retrievedAt': stamp(now), 'orderAuthority': False,
-               'markets': [{'symbol': symbol, 'venue': venue, 'frames': {'4h': reading}}]}
         (root/'market-pipeline.json').write_text(json.dumps(doc))
 
     def environment(self, root, armed=True, entries=True):
@@ -67,7 +59,8 @@ class StockAutoRuntime(unittest.TestCase):
             events = [json.loads(line) for line in (root/'stock-paper-events.jsonl').read_text().splitlines()]
             decisions = [row for row in events if row['kind'] == 'DECISION']
             self.assertTrue(all(row['detail']['preflight']['accountReady'] for row in decisions))
-            self.assertEqual(decisions[0]['detail']['reading']['candleShapes'], ['hammer_shape'])
+            self.assertIn('hammer_shape',decisions[0]['detail']['reading']['candleShapes'])
+            self.assertTrue(decisions[0]['detail']['nativeInputVerification']['verified'])
             self.assertEqual(decisions[1]['detail']['originEntryId'], decisions[0]['clientOrderId'])
             self.assertFalse(decisions[1]['detail']['preflight']['buyingPowerChecked'])
 
@@ -102,6 +95,18 @@ class StockAutoRuntime(unittest.TestCase):
             self.assertEqual([row['kind'] for row in events],['DECISION','NOT_SENT'])
             self.run_auto(root)
             self.assertEqual(self.posts(root),[])
+
+    def test_missing_or_changed_original_candle_proof_blocks_automatic_http(self):
+        for remove in (True,False):
+            with self.subTest(remove=remove),tempfile.TemporaryDirectory() as directory:
+                root=self.fixture(directory);self.analysis(root)
+                p=root/'market-pipeline.json';doc=json.loads(p.read_text())
+                reading=doc['markets'][0]['frames']['4h']
+                if remove:reading.pop('dataEvidence')
+                else:reading['ema20']+=1
+                p.write_text(json.dumps(doc));self.run_auto(root)
+                self.assertEqual(self.posts(root),[])
+                self.assertEqual(json.loads((root/'stock-paper-ledger.json').read_text())['orders'],[])
 
     def test_disarmed_paused_closed_and_old_quotes_cannot_submit(self):
         for state, opts in [({}, {'armed': False}), ({}, {'entries': False}), ({'open': False}, {}),

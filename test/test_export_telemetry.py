@@ -45,6 +45,17 @@ class DecisionHistoryTests(unittest.TestCase):
         self.assertNotIn("private",json.dumps(projected)); self.assertNotIn("secret",json.dumps(projected))
         self.assertEqual(native_input_evidence({}),{})
         self.assertEqual(native_input_evidence({"dataEvidence":{**proof,"inputSha256":"fake"}}),{})
+        verified={"verified":True,"orderAuthority":False,"inputSha256":sha,"engineSha256":sha,
+            "analysisAsOf":proof['analysisAsOf'],"verifiedAt":"2026-10-05T13:31:02Z","seconds":0.05}
+        with patch('export_telemetry.datetime') as clock:
+            clock.fromisoformat.side_effect=datetime.fromisoformat
+            clock.now.return_value=datetime(2026,10,5,13,32,tzinfo=timezone.utc)
+            value=native_input_evidence({"dataEvidence":proof},verified)
+            self.assertTrue(value['native_input_verified'])
+            for change in ({'inputSha256':'wrong'},{'seconds':True},{'verifiedAt':'private'},
+                           {'verifiedAt':'2099-01-01T00:00:00Z'},{'verified':False}):
+                value=native_input_evidence({'dataEvidence':proof},{**verified,**change})
+                self.assertNotIn('native_input_verified',value)
 
     def test_separate_session_protocol_is_pinned_and_exposes_only_checked_per_frame_counts(self):
         import hashlib

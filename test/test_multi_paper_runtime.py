@@ -91,15 +91,10 @@ class RuntimeTests(unittest.TestCase):
         return root
 
     def refresh_signal(self, root):
-        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-        bar = now - timedelta(minutes=now.minute % 5 + 5)
-        (root / "market-pipeline.json").write_text(json.dumps({
-            "asOf": now.isoformat().replace("+00:00", "Z"),
-            "policy": "trend_candle_confluence_v1", "orderAuthority": False,
-            "markets": [{"venue": "Alpaca crypto", "symbol": "ETH/USD", "frames": {
-                "5m": {"status": "candidate", "candidate": "long", "close": 100,
-                    "lastBarStart": bar.isoformat().replace("+00:00", "Z"),
-                    "invalidationLevel": 90, "orderAuthority": False, "winProbability": None}}}]}))
+        from native_input_fixture import document
+        symbol=json.loads((root/'broker.json').read_text()).get('symbol','ETH/USD')
+        result=document(root,symbol,'Alpaca crypto','5m')
+        (root / "market-pipeline.json").write_text(json.dumps(result))
 
     def run_engine(self, root, armed=True, new_entries=True, wind_down=False, include_btc=False, ok=True, extra_env=None):
         environment = {**os.environ, "PATH": str(root)+":"+os.environ["PATH"],
@@ -234,6 +229,19 @@ class RuntimeTests(unittest.TestCase):
             self.update_broker(root, open_orders=[{"symbol":"ETHUSD"}])
             self.run_engine(root)
             self.assertEqual(self.posts(root), [])
+
+    def test_missing_or_altered_native_reading_never_submits_crypto_http(self):
+        for remove in (True,False):
+            with self.subTest(remove=remove),tempfile.TemporaryDirectory() as directory:
+                root=self.setup_fixture(directory)
+                p=root/'market-pipeline.json';doc=json.loads(p.read_text())
+                reading=doc['markets'][0]['frames']['5m']
+                if remove:reading.pop('dataEvidence')
+                else:reading['ema20']+=1
+                p.write_text(json.dumps(doc));result=self.run_engine(root)
+                self.assertEqual(self.posts(root),[])
+                self.assertEqual(result['activeTickets'],[])
+                self.assertIn('Native candidate proof',json.dumps(result['abstentions']))
 
     def test_paused_entries_preserve_owned_exit_management(self):
         with tempfile.TemporaryDirectory() as directory:

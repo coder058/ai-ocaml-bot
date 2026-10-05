@@ -153,6 +153,13 @@ let run () =
             match managed with
             | Some row when get_string "clientOrderId" row=origin && field "analysisEvidence" row<>None->()
             | _->failwith "automatic exit has no owned managed entry");
+          let evidence=if side="buy" then (
+            let document=Option.value ~default:`Null (field "analysis" evidence) in
+            let proof=unwrap (Execution_proof.Native_inputs.verify ~state_dir
+              ~as_of:(get_string "asOf" document) ~venue:"Alpaca equities" ~symbol:ticker
+              ~frame:(get_string "frame" evidence)
+              ~reading:(Option.value ~default:`Null (field "reading" evidence))) in
+            replace "nativeInputVerification" proof evidence) else evidence in
           let quote_doc=unwrap (Paper_stock_broker.quotes [ticker]) in
           let quote=unwrap (Stock_policy.quote ~now:(Unix.gettimeofday ()) ~symbol:ticker quote_doc) in
           if side="buy" && Option.value ~default:infinity (Paper_broker.float (field "invalidationLevel" evidence))>=quote.bid then

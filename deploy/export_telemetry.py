@@ -10,6 +10,7 @@ import base64
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -613,7 +614,7 @@ def joined_decisions(orders: list[dict], path: Path, prefix: str):
     return matched
 
 
-def native_input_evidence(reading: dict) -> dict:
+def native_input_evidence(reading: dict, verification=None) -> dict:
     """Allowlist recorded hashes only; never expose archive paths or raw inputs."""
     proof = reading.get("dataEvidence")
     if not isinstance(proof, dict) or proof.get("schema") != "native_closed_frame_input_v1" or proof.get("orderAuthority") is not False:
@@ -630,6 +631,25 @@ def native_input_evidence(reading: dict) -> dict:
         value = proof.get(name)
         if isinstance(value,str):
             result[key] = value
+    verified = verification if verification is not None else reading.get("nativeInputVerification")
+    if (isinstance(verified,dict) and verified.get("verified") is True
+            and verified.get("orderAuthority") is False
+            and verified.get("inputSha256") == proof["inputSha256"]
+            and verified.get("engineSha256") == proof["engineSha256"]
+            and verified.get("analysisAsOf") == proof.get("analysisAsOf")):
+        seconds = verified.get("seconds")
+        at = verified.get("verifiedAt")
+        try:
+            checked_at=datetime.fromisoformat(at.replace("Z","+00:00"))
+            analysis_at=datetime.fromisoformat(proof["analysisAsOf"].replace("Z","+00:00"))
+            clock_valid=(checked_at.tzinfo is not None and analysis_at.tzinfo is not None
+                         and analysis_at <= checked_at <= datetime.now(timezone.utc))
+        except (AttributeError,ValueError,TypeError,KeyError):
+            clock_valid=False
+        if (isinstance(seconds,(int,float)) and not isinstance(seconds,bool)
+                and math.isfinite(seconds) and seconds >= 0 and clock_valid):
+            result.update({"native_input_verified": True, "native_input_verified_at": at,
+                           "native_input_replay_seconds": seconds})
     return result
 
 
@@ -647,7 +667,7 @@ def stock_order_evidence(orders:list[dict],path:Path=STATE_DIR/"stock-paper-even
                 "invalidation_level":detail.get("invalidationLevel"),"ema20":reading.get("ema20"),
                 "ema50":reading.get("ema50"),"rsi14":reading.get("rsi14"),"trend":reading.get("trend"),
                 "candle_shapes":", ".join(reading.get("candleShapes",[]))}
-            values.update(native_input_evidence(reading))
+            values.update(native_input_evidence(reading, detail.get("nativeInputVerification")))
             preflight=detail.get("preflight",{})
             if isinstance(preflight,dict):
                 values.update({"trigger_bid":preflight.get("bid"),"trigger_ask":preflight.get("ask"),

@@ -173,7 +173,7 @@ only possible defects. No zero-error or perfection claim is permitted.
 | D2 | Revision-aware calculation reuse deployed; minute polling and cache/transport cost remain | Profile separated phases and integrate event-driven receipt without changing causal eligibility |
 | E1 | Stocks remain observation; fractional paper lifecycle unverified in regular session | Executable quote/cost/risk review, exact order/fill evidence and owned exits |
 | F1 | Actual spot FX execution unavailable | Supported practice catalog, authorized account, adapter and broker acknowledgement |
-| A1 | Markov is descriptive shadow; digest/data inventory incomplete | Data provenance, defined executable target, chronological baseline/calibration comparison |
+| A1 | Markov is descriptive shadow; actual related data inventory exists, intended digest identity/model remain incomplete | Data provenance, defined executable target, chronological baseline/calibration comparison |
 | A2 | $50/$500 confidence tiers lack calibration | Out-of-sample calibrated probability and an explicit sizing rule; retain $100 baseline meanwhile |
 | R1 | Portfolio loss/correlation/disconnection controls incomplete | Tested aggregate reservations and actual owned risk; validate fractional broker stops and their expiry |
 | L1 | Lifecycle latency incomplete; individual scan times vary substantially | Measured candle/receipt/decision/persist/send/ack/fill timestamps per route |
@@ -184,3 +184,19 @@ only possible defects. No zero-error or perfection claim is permitted.
 Review this register against code, tests, live services and actual broker records
 after each completed change. Remove a gap only when its stated proof exists.
 Paper execution quality and paper results do not establish live profitability.
+
+
+## Original native replay and data inventory — 14:17 UTC
+
+Automatic entry routers now require the retained native archive and original
+executable to reproduce every native output field. New entries remain paused.
+Managed exits retain their original ownership handling; older orders are not
+retrospectively certified. Real SPY 1m replay, hostile input/corrupt archive
+checks and real router fake-HTTP lifecycle tests passed; exact evidence and
+initial fixture failures are in EXECUTION-TRACE-WORK.md.
+
+Actual related recordings/news metadata are inventoried in
+RELATED-DATA-INVENTORY.md. September news receipts cannot be used for decisions
+in May–August recordings. This resolves part of data discovery, not A1/A2 AI
+training/calibration or strategy deployment. CI for incremental commit 03160b1
+passed both jobs in run 37320658710. No completion, edge or profit claim.
