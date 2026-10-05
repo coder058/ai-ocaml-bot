@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from decision_quote_capture import normalize, quote_time, MAX_QUOTE_AGE_SECONDS
+from decision_quote_capture import normalize_at, quote_time, MAX_QUOTE_AGE_SECONDS
 from forward_pattern_audit import FRAME_SECONDS, BPS, read_journal
 
 
@@ -23,8 +23,7 @@ def reference(value):
     venue,symbol=value["venue"],value["symbol"]
     if venue not in ("Alpaca crypto","Alpaca equities") or symbol=="AAPL" or venue=="Alpaca crypto" and symbol not in ("BTC/USD","ETH/USD","SOL/USD"):
         raise ValueError("quote instrument unsupported or protected")
-    received_at=datetime.fromisoformat(value["receivedAt"].replace("Z","+00:00"))
-    checked=normalize({"t":value["quoteAt"],"bp":value["bid"],"ap":value["ask"],"bs":value["bidSizeRaw"],"as":value["askSizeRaw"]},received_at,venue,symbol)
+    checked=normalize_at({"t":value["quoteAt"],"bp":value["bid"],"ap":value["ask"],"bs":value["bidSizeRaw"],"as":value["askSizeRaw"]},value["receivedAt"],venue,symbol)
     if value.get("status")!="fresh" or checked["status"]!="fresh" or value.get("feed")!=checked["feed"]:
         raise ValueError("quote was not fresh on its actual source feed")
     return {**checked,"received":quote_time(value["receivedAt"]),"at":quote_time(value["quoteAt"])}
@@ -42,6 +41,35 @@ def read_quotes(path):
             try:rows.append(reference(json.loads(raw)))
             except (ValueError,KeyError,TypeError,OverflowError):counts["unusableReferences"]+=1
     return rows,{**dict(counts),"usableReferences":len(rows),"inputBytes":size,"sha256":digest.hexdigest()}
+
+
+def read_stream_quotes(paths):
+    """Frozen existing crypto archives for exits only, not repaired first entries."""
+    rows,counts,sources=[],Counter(),[]
+    for path in paths:
+        digest=hashlib.sha256()
+        with path.open("rb") as source:
+            size=path.stat().st_size
+            while source.tell()<size:
+                raw=source.readline(size-source.tell());digest.update(raw)
+                if not raw.endswith(b"\n"):
+                    counts["partialFinalLine"]+=1;break
+                counts["lines"]+=1
+                try:
+                    record=json.loads(raw);event=record["event"]
+                    if event.get("T")!="q":counts["nonQuoteEvents"]+=1;continue
+                    if record.get("feed")!="alpaca-us" or event.get("S") not in ("BTC/USD","ETH/USD","SOL/USD"):
+                        raise ValueError("unsupported stream feed/instrument")
+                    ns=record["receivedAtNs"]
+                    if not isinstance(ns,int) or isinstance(ns,bool):raise ValueError("invalid clock")
+                    # SOURCE: 1,000,000,000 nanoseconds per second, exact integer
+                    # division keeps the archived clock, not a float approximation.
+                    seconds,fraction=divmod(ns,1_000_000_000)
+                    receipt=datetime.fromtimestamp(seconds,timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")+f".{fraction:09d}Z"
+                    rows.append(reference(normalize_at(event,receipt,"Alpaca crypto",event["S"])))
+                except (ValueError,KeyError,TypeError,OverflowError):counts["unusableReferences"]+=1
+        sources.append({"file":path.name,"inputBytes":size,"sha256":digest.hexdigest()})
+    return rows,{**dict(counts),"usableReferences":len(rows),"sources":sources}
 
 
 def report(frames,quotes,*,horizon_bars,max_exit_lag_seconds,split_at,crypto_taker_bps,as_of):
@@ -84,6 +112,7 @@ def report(frames,quotes,*,horizon_bars,max_exit_lag_seconds,split_at,crypto_tak
         modeled_net=(ratio*(1-fee)*(1-fee)-1)*BPS if row["venue"]=="Alpaca crypto" else None
         labels.append({"venue":row["venue"],"symbol":row["symbol"],"frame":row["frame"],
             "fold":"discovery" if observed<split else "validation", "patterns":row["patterns"],
+            "observedPolicy":row.get("policy"),"observedCandidate":row.get("candidate"),
             "signalObservedAt":row["observedAtText"],"entryReferenceReceivedAt":entry["receivedAt"],
             "exitReferenceReceivedAt":exit_quote["receivedAt"],"holdingSeconds":float(exit_quote["received"]-observed),
             "exitLagSeconds":float(exit_quote["received"]-due),"entryAskReference":entry["ask"],"exitBidReference":exit_quote["bid"],
@@ -103,10 +132,18 @@ def report(frames,quotes,*,horizon_bars,max_exit_lag_seconds,split_at,crypto_tak
                 "cryptoFeeScenario":distribution(nets,"meanModeledAfterFeeBps") if nets else None}
     comparisons=[{"venue":key[0],"symbol":key[1],"frame":key[2],"fold":key[3],"pattern":key[4],"signedCode":key[5],
                   "references":stats(rows),"sameMarketFrameFoldBaseline":stats(controls[key[:4]])} for key,rows in sorted(patterns.items())]
+    # SOURCE: membership uses the already recorded frozen OCaml policy/candidate,
+    # not today's re-evaluated chart or a policy selected from these results.
+    policy_rows=[row for row in labels if row["observedPolicy"]=="trend_candle_confluence_v1" and row["observedCandidate"]=="long"]
+    policy_markets=sorted({(row["venue"],row["symbol"],row["frame"],row["fold"]) for row in policy_rows})
+    policy_subset={"policy":"trend_candle_confluence_v1","side":"long","referenceCount":len(policy_rows),
+        "foldCounts":dict(Counter(row["fold"] for row in policy_rows)),"summary":stats(policy_rows),
+        "matchedBaselines":[{"venue":key[0],"symbol":key[1],"frame":key[2],"fold":key[3],"references":stats(controls[key])} for key in policy_markets],
+        "executionModel":None,"orderAuthority":False,"winProbability":None}
     return {"schema":"first_observed_long_quote_reference_v1","orderAuthority":False,"winProbability":None,"brokerPnl":None,
         "horizonBars":horizon_bars,"maxExitLagSeconds":max_exit_lag_seconds,"splitAt":split_at,"cryptoTakerBpsScenario":crypto_taker_bps,
         "labelCount":len(labels),"foldCounts":dict(Counter(row["fold"] for row in labels)),"rejected":dict(rejected),
-        "comparisonCount":len(comparisons),"comparisons":comparisons,"summary":stats(labels),"labels":labels,
+        "comparisonCount":len(comparisons),"comparisons":comparisons,"summary":stats(labels),"labels":labels,"frozenPolicySubset":policy_subset,
         "limits":["Sampled bid/ask references are not orders, fills or guaranteed executable prices",
                   "No order latency, queue, partial fills, impact or normalized size/depth model",
                   "IEX is a single exchange; equity net costs remain unknown",
@@ -120,16 +157,35 @@ def report(frames,quotes,*,horizon_bars,max_exit_lag_seconds,split_at,crypto_tak
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
-    for name in ("journal","quotes","output"):parser.add_argument("--"+name,type=Path,required=True)
+    for name in ("journal","output"):parser.add_argument("--"+name,type=Path,required=True)
+    parser.add_argument("--quotes",type=Path,nargs="+",required=True)
+    # SOURCE: explicitly distinguish the original REST references from existing
+    # stream receipts. This is a separate attempt, not a winning exit selection.
+    parser.add_argument("--quote-source",choices=("rest_reference","crypto_stream"),default="rest_reference")
+    parser.add_argument("--rest-exit-baseline",type=Path,help="Compare REST exits on the exact same feature prefix and as-of time")
     parser.add_argument("--horizon-bars",type=int,required=True)
     parser.add_argument("--max-exit-lag-seconds",type=int,required=True)
     parser.add_argument("--split-at",required=True)
     parser.add_argument("--crypto-taker-bps",type=float,required=True)
     args=parser.parse_args()
-    frames,frame_input=read_journal(args.journal);quotes,quote_input=read_quotes(args.quotes)
+    if args.quote_source=="rest_reference" and len(args.quotes)!=1:parser.error("REST reference expects one journal")
+    if args.rest_exit_baseline and args.quote_source!="crypto_stream":parser.error("REST baseline is only meaningful for a stream-exit comparison")
+    frames,frame_input=read_journal(args.journal)
+    quotes,quote_input=read_stream_quotes(args.quotes) if args.quote_source=="crypto_stream" else read_quotes(args.quotes[0])
+    baseline_quotes,baseline_input=read_quotes(args.rest_exit_baseline) if args.rest_exit_baseline else (None,None)
     as_of=datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
     result=report(frames,quotes,horizon_bars=args.horizon_bars,max_exit_lag_seconds=args.max_exit_lag_seconds,
                   split_at=args.split_at,crypto_taker_bps=args.crypto_taker_bps,as_of=as_of)
-    result.update({"generatedAt":as_of,"frameInput":frame_input,"quoteInput":quote_input})
+    result.update({"generatedAt":as_of,"frameInput":frame_input,"quoteInput":quote_input,"exitReferenceSource":args.quote_source})
+    if baseline_quotes is not None:
+        baseline=report(frames,baseline_quotes,horizon_bars=args.horizon_bars,max_exit_lag_seconds=args.max_exit_lag_seconds,
+                        split_at=args.split_at,crypto_taker_bps=args.crypto_taker_bps,as_of=as_of)
+        baseline.update({"generatedAt":as_of,"quoteInput":baseline_input,"exitReferenceSource":"rest_reference"})
+        result["restExitBaseline"]=baseline
+        identity=lambda row:(row["venue"],row["symbol"],row["frame"],row["signalObservedAt"])
+        result["commonLabelCount"]=len({identity(row) for row in result["labels"]}&{identity(row) for row in baseline["labels"]})
     args.output.write_text(json.dumps(result,allow_nan=False,indent=2)+"\n")
-    print(json.dumps({k:result[k] for k in ["labelCount","foldCounts","rejected","comparisonCount","summary","frameInput","quoteInput"]}))
+    output={k:result[k] for k in ["labelCount","foldCounts","rejected","comparisonCount","summary","frozenPolicySubset","frameInput","quoteInput"]}
+    if baseline_quotes is not None:
+        output.update({"commonLabelCount":result["commonLabelCount"],"restExitBaseline":{k:baseline[k] for k in ("labelCount","foldCounts","rejected","summary","frozenPolicySubset","quoteInput")}})
+    print(json.dumps(output))

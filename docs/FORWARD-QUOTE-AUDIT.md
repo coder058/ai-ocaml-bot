@@ -76,3 +76,68 @@ do not establish live profitability. Do not promote a policy from this audit.
 
 No policy was promoted. The sample is crypto-only and contains no validated
 stock/ETF execution opportunity. No conclusion about spot FX was possible.
+
+## Separate frozen stream-exit attempt — before its first run
+
+The existing Alpaca crypto capture has immutable provider quotes and actual
+nanosecond reception clocks for BTC/ETH/SOL. Use those **only for subsequent
+exit references**, keeping the same first-observed feature row and entry quote.
+No earlier missing entry is repaired. No new connection or credential is needed.
+
+All horizon, split, five-second freshness, 120-second lag and conditional T1
+scenario choices above remain unchanged. Keep this attempt separate from the
+REST-exit report: denser sampling changes which first future quote is observed.
+It is not an optimized execution rule, actual broker fill or a promoted policy.
+Both daily archive prefixes are hashed separately and incomplete appends skipped.
+
+Before reporting this extension, freeze an explicit subset of **originally
+recorded** `trend_candle_confluence_v1` **long** candidates. Do not recompute
+the signal or infer membership from signed TA-Lib codes. Keep the unconditional
+same-market/frame/fold controls, counts and no-order-authority boundary. This
+subset remains a quote reference, not a stop-managed executed strategy backtest;
+absent stock labels cannot be evidence to arm the stock scheduler.
+
+For a controlled source comparison, load the feature prefix once and use one
+common as-of time for both exit sources, with every other frozen choice above
+unchanged. Publish both reports, including absent labels and failures. Do not
+attribute differences from the earlier 92-label run solely to exit sampling,
+because subsequent feature records also arrived.
+
+```sh
+.venv/bin/python research/forward_quote_audit.py \
+  --journal /home/ubuntu/jsbot-paper-state/market-frame-decisions.jsonl \
+  --quotes /home/ubuntu/jsbot-paper-state/market-capture/us/2026-10-04.jsonl \
+           /home/ubuntu/jsbot-paper-state/market-capture/us/2026-10-05.jsonl \
+  --quote-source crypto_stream --horizon-bars 1 --max-exit-lag-seconds 120 \
+  --rest-exit-baseline /home/ubuntu/jsbot-paper-state/market-quotes-reference.jsonl \
+  --split-at 2026-10-04T21:00:00Z --crypto-taker-bps 25 \
+  --output /home/ubuntu/jsbot-paper-state/forward-stream-quote-audit.json
+```
+
+### Controlled stream/REST result — 2026-10-05
+
+On one common feature prefix and as-of clock, stream exits supplied 133 labels
+versus 103 REST exits; all 103 REST label identities were also present in the
+stream result. Both had zero discovery observations and 8,071 missing fresh
+first entry references. Stream timely-exit rejections: five; REST: 35. This
+measures sampling coverage, not better trading performance.
+
+The originally recorded frozen **long** confluence subset had ten stream labels,
+only BTC 1m/5m. Its mean ask-to-bid reference movement was -5.2014212485856905 bps;
+conditional T1 after-fee scenario -55.112946651224355 bps. REST had eight such
+labels, means -5.49294064657785 / -55.403010274222844 bps. Neither subset supports
+policy promotion; there were no stock labels, verified fill outcomes or calibrated
+probabilities. The stream unconditional set had 133 references and 87 exploratory
+pattern comparisons, mean -3.9787533968174844 / scenario -53.89638449704103 bps.
+
+Feature prefix 339,490,971 bytes, SHA-256
+`18977e3c4be89e6fe5c74aea3d505d2b96614b9068c3d13edfc4bd9772569cd7`.
+REST quote prefix 230,988 bytes, SHA-256
+`bbb0c9a08f62b66ccb7ef662c75e4b725ec851d19fc4a7bc5a834641d76e52d5`.
+Stream day October 4: 44,033,079 bytes, SHA-256
+`541c755dbff5ef5b9f8cb34f12a42ef8bd8c8ca38af4dbe3a185e78258498339`;
+October 5: 2,149,397 bytes, SHA-256
+`bd04a7ff2df11bff74de0544ca77856907be2fc321c2d4cc0aaac408a3a96b58`.
+47,268 stream references passed source/receipt/freshness/price/size checks;
+43,918 were unusable; 98,723 non-quote events were excluded. All prefixes and
+full comparison rows remain in the private reproducible report.

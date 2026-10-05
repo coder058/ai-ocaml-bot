@@ -63,6 +63,7 @@ def observation(record):
             "start": start, "observed": observed, "o": op, "c": close,
             "patterns": patterns, "status": reading.get("status"),
             "observedAtText": record["observedAt"], "quoteReference": reading.get("quoteReference"),
+            "policy":record.get("policy"),"candidate":reading.get("candidate"),
             "source": evidence.get("source") or suite.get("source")}
 
 

@@ -40,6 +40,10 @@ test("observed quote reference never replaces risk readiness or historical order
   assert.equal(executionView(t,now).orders.length,0);
   r.quoteReference.orderAuthority=true;
   assert.equal(executionView(t,now).rows.find(r=>r.symbol==='ETH/USD'&&r.frame==='30m').steps.find(s=>s.stage==='Observed bid / ask reference').state,'unknown');
+  r.quoteReference={purpose:'observed_quote_reference_not_execution',orderAuthority:false,winProbability:null,status:'invalid',reason:'empty_or_negative_provider_size'};
+  assert.match(executionView(t,now).rows.find(r=>r.symbol==='ETH/USD'&&r.frame==='30m').steps.find(s=>s.stage==='Observed bid / ask reference').detail,/empty or negative provider size/);
+  r.quoteReference.reason='PRIVATE_EXCEPTION_TEXT';
+  assert.equal(JSON.stringify(executionView(t,now)).includes('PRIVATE_EXCEPTION_TEXT'),false);
 });
 
 test("dated research summary cannot publish private labels, returns, future data or execution authority", () => {

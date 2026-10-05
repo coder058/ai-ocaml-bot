@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"research"))
 from decision_quote_capture import normalize, quote_time
-from forward_quote_audit import reference, read_quotes, report
+from forward_quote_audit import reference, read_quotes, read_stream_quotes, report
 from forward_pattern_audit import read_journal
 from test_forward_pattern_audit import record, instant
 
@@ -130,5 +130,39 @@ class QuoteAuditTests(unittest.TestCase):
             with self.assertRaises(ValueError):audit(**settings)
         self.assertEqual(audit([frame(patterns={"CDLENGULFING":None})])["rejected"],{"noFirstObservedPatternValues":1})
         self.assertEqual(quote_time("2026-10-04T22:00:00.000000001Z")-quote_time(START),__import__("decimal").Decimal(".000000001"))
+
+    def test_existing_stream_receipt_nanoseconds_are_exact_and_scope_is_not_expanded(self):
+        # SOURCE: synthetic stream clock, events and prices, not market data.
+        ns=int(quote_time(START)*1_000_000_000)+123456789
+        event={"T":"q","S":"BTC/USD","t":"2026-10-04T22:00:00.123456788Z","bp":99,"ap":100,"bs":1,"as":1}
+        good={"feed":"alpaca-us","receivedAtNs":ns,"event":event}
+        bad=[{**good,"feed":"other"},{**good,"event":{**event,"S":"DOGE/USD"}},
+             {**good,"receivedAtNs":True},{**good,"event":{**event,"t":"2026-10-04T22:00:00.123456790Z"}}]
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/"2026-10-04.jsonl"
+            raw=("\n".join(json.dumps(v) for v in [good,*bad,{**good,"event":{**event,"T":"b"}}])+"\n{unfinished").encode()
+            path.write_bytes(raw);rows,metadata=read_stream_quotes([path])
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]["receivedAt"],"2026-10-04T22:00:00.123456789Z")
+        self.assertEqual(rows[0]["received"]-rows[0]["at"],__import__("decimal").Decimal(".000000001"))
+        self.assertEqual(metadata["unusableReferences"],4)
+        self.assertEqual(metadata["nonQuoteEvents"],1)
+        self.assertEqual(metadata["partialFinalLine"],1)
+        self.assertEqual(metadata["sources"][0]["sha256"],hashlib.sha256(raw).hexdigest())
+
+    def test_stream_outcome_does_not_repair_missing_original_entry(self):
+        entry=frame();entry["quoteReference"]=None
+        self.assertEqual(audit([entry])["labelCount"],0)
+
+    def test_frozen_policy_subset_requires_original_exact_policy_and_long_candidate(self):
+        rows=[frame(policy="trend_candle_confluence_v1",candidate="long"),
+              frame(policy="trend_candle_confluence_v1",candidate="short"),frame(candidate="long"),
+              frame(policy="another_policy",candidate="long")]
+        result=audit(rows);subset=result["frozenPolicySubset"]
+        self.assertEqual(result["labelCount"],4)
+        self.assertEqual(subset["referenceCount"],1)
+        self.assertEqual(subset["foldCounts"],{"validation":1})
+        self.assertEqual(subset["matchedBaselines"][0]["references"]["longQuoteReferences"]["count"],4)
+        self.assertFalse(subset["orderAuthority"]);self.assertIsNone(subset["executionModel"])
 
 if __name__=="__main__":unittest.main()

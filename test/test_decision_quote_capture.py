@@ -31,8 +31,11 @@ class QuoteTests(unittest.TestCase):
         self.assertEqual(normalize(None,NOW,"Alpaca equities","QQQ")["status"],"missing")
 
     def test_crossed_nonfinite_empty_and_naive_quotes_are_invalid(self):
-        for change in [{"bp":102},{"bp":float("nan")},{"bs":0},{"as":-1},{"t":"2026-10-04T21:20:00"}, {"ap":None}]:
+        for change in [{"bp":102},{"bp":float("nan")},{"bs":0},{"as":-1},{"t":"2026-10-04T21:20:00"}, {"ap":None},{"bp":True}]:
             self.assertEqual(normalize({**QUOTE,**change},NOW,"Alpaca crypto","BTC/USD")["status"],"invalid")
+        self.assertEqual(normalize({**QUOTE,"bs":0},NOW,"Alpaca crypto","BTC/USD")["reason"],"empty_or_negative_provider_size")
+        self.assertEqual(normalize({**QUOTE,"bp":102},NOW,"Alpaca crypto","BTC/USD")["reason"],"nonpositive_or_crossed_bid_ask")
+        self.assertEqual(normalize({**QUOTE,"t":"secret-value"},NOW,"Alpaca crypto","BTC/USD")["reason"],"invalid_or_missing_quote_fields")
 
     def test_exact_read_only_batch_scopes_and_partial_missing_responses(self):
         request=Mock(side_effect=[{"quotes":{"BTC/USD":QUOTE}},{"quotes":{"QQQ":QUOTE}}])
