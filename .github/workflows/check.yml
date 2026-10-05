@@ -38,6 +38,7 @@ jobs:
           python -m unittest discover -s test -p test_decision_quote_capture.py -v
           python -m unittest discover -s test -p test_archived_quote_reference.py -v
           python -m unittest discover -s test -p test_forward_quote_audit.py -v
+          python -m unittest discover -s test -p test_score_markov_shadow.py -v
   monitor:
     runs-on: ubuntu-latest
     defaults:

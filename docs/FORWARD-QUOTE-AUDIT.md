@@ -153,3 +153,25 @@ later than feature observation or earlier than captured receipt. It reports
 inferring historical transport. This changes acquisition for new observations,
 not the frozen horizon, temporal split, fee scenario, long membership or order
 policy. It is not evidence of improved returns or execution.
+
+## Unchanged prospective audit — 2026-10-05 01:29:54 UTC
+
+Same original feature prefix/as-of across stream/REST exits, unchanged one-frame
+horizon, 120-second lag, 21:00 split and published T1 scenario. Stream 191 labels
+versus REST 155, all 155 common; no discovery labels. Original entry transports:
+178 not recorded / 11 REST batch / two actually archived WebSocket. Those two
+new source records were not retroactively attached to old observations. This
+small count is not a general coverage or performance improvement claim.
+
+Frozen long confluence: 14 stream references, mean -4.847230918918556 bps /
+conditional fee scenario -54.76052505951608 bps. REST subset 12, likewise
+negative. No policy promotion, calibrated probability, fills or broker P&L.
+
+Feature prefix 352,173,472 bytes, SHA-256
+`7989886bbaae849332ffe5e10e9ee9e24233fad1bc86edbaf275a1c50112b12b`.
+Stream 4 October 44,033,079 bytes, SHA-256
+`541c755dbff5ef5b9f8cb34f12a42ef8bd8c8ca38af4dbe3a185e78258498339`;
+5 October 7,527,518 bytes, SHA-256
+`4f80589ea14482f7a33c8a7c175f94054f4e3f1e125ac363f8166df5bb9415bc`.
+REST 314,171 bytes, SHA-256
+`fec08b5e0868fef2dc23f360c4a4c4b0ec9e0e8f6b9b2a858197a74abcfa7f75`.

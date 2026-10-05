@@ -61,6 +61,10 @@ negative under that scenario; it did not authorize stock or crypto policy
 activation. The monitor shows this research limitation separately from fills.
 Scanner performance work preserves exact full-analysis parity; measurements
 and their limits are recorded in [the pipeline guide](docs/MARKET-PIPELINE.md).
+The [frozen Markov shadow score](docs/MARKOV-SHADOW-SCORE.md) validates actual
+prospective predictions against a training-base-rate control. Its observed
+Brier difference is small and native price movements do not justify execution
+after costs; the model has no order authority.
 
 - The Dublin collector archives Alpaca US BTC/USD WebSocket quotes, trades,
   order books, closed-minute bars and later bar revisions with receipt times.
@@ -145,8 +149,11 @@ and acceptance gates; it does not claim unbuilt steps are implemented.
 ## Trading desk
 
 [Native daily/weekly context](docs/PRIMARY-TREND-CONTEXT.md) augments the five
-intraday Murphy panels for monitored Alpaca instruments. Other venues and
-monthly history remain incomplete; this descriptive context cannot authorize orders.
+intraday Murphy panels for monitored Alpaca instruments. Public HIP-3
+instruments now retain their own actual daily/weekly data and native
+Thursday weekly grid. All 19 HIP-3 contexts were retrieved by 01:23 UTC on
+5 October; 18 weekly series still lacked EMA50 warmup. Monthly history remains
+incomplete; this descriptive context cannot authorize orders.
 
 The current desk shows **Open positions**, **Analysis & execution**, **New paper
 orders** and **Market charts**. Earlier closed-trade history, the old curve and
