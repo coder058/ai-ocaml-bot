@@ -9,6 +9,11 @@
  (libraries paper_market))
 
 (test
+ (name test_btc_order_state)
+ (modules test_btc_order_state)
+ (libraries paper_market unix))
+
+(test
  (name test_pattern_forge)
  (modules test_pattern_forge)
  (libraries paper_market))

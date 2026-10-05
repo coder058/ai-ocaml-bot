@@ -65,30 +65,13 @@ let filled_qty j =
   | _ -> 0.
 
 let reconcile_pending () =
-  match read_line pending_path with
-  | None -> Ok false
-  | Some line ->
-    (match String.split_on_char ' ' line with
-     | [ side; id ] when side = "buy" || side = "sell" ->
-       (match Paper_broker.order_by_client_id id with
-        | Error e -> Error ("pending order unresolved: " ^ e)
-        | Ok order ->
-          (match Paper_broker.order_status order with
-           | None -> Error "pending order has no status"
-           | Some status ->
-             log "reconcile id=%s side=%s status=%s filled_qty=%.9f broker_filled_at=%s"
-               id side status (filled_qty order)
-               (Option.value (Paper_broker.string (Paper_broker.member "filled_at" order))
-                  ~default:"none");
-             if List.mem status [ "filled"; "canceled"; "expired"; "rejected" ] then (
-               if side = "buy" && filled_qty order > 0. then
-                 write_atomic owned_path id;
-               if side = "sell" && status = "filled" then
-                 remove_if_exists owned_path;
-               remove_if_exists pending_path;
-               Ok false)
-             else Ok true))
-     | _ -> Error "pending journal malformed")
+  Btc_order_state.reconcile ~pending_path ~owned_path
+    ~lookup:Paper_broker.order_by_client_id
+    ~record:(fun pending outcome order ->
+      log "reconcile id=%s side=%s status=%s filled_qty=%s broker_filled_at=%s"
+        pending.Btc_order_state.id pending.side outcome.Btc_order_state.status
+        (Exact_decimal.to_string outcome.filled)
+        (Option.value (Paper_broker.string (Paper_broker.member "filled_at" order)) ~default:"none"))
 
 let broker_state () =
   match Paper_broker.account (), Paper_broker.positions (),
@@ -156,7 +139,9 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
                  log "HOLD hot quote became stale before paper submission"
                else (
                  let id = client_id side current.timestamp in
-                 write_atomic pending_path (side ^ " " ^ id);
+                 (* SOURCE: retain the exact nine-decimal wire quantity with
+                    intent before POST; legacy two-field intents still reconcile. *)
+                 write_atomic pending_path (Printf.sprintf "%s %s %.9f" side id qty);
                  log "SEND paper %s BTC/USD qty=%.9f limit=%g id=%s" side qty price id;
                  let submitted_ns =
                    int_of_float (Unix.gettimeofday () *. 1_000_000_000.) in
