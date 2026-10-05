@@ -73,6 +73,11 @@ async def capture():
                 handle.write(json.dumps({'event':row,'receivedAtNs':received,'session':session,'sequence':sequence})+'\n')
                 health['quoteCount' if row['T']=='q' else 'barCount']+=1
                 health['lastMarketEventAt']=row['t']
+              # SOURCE: readers need a complete received frame even if the
+              # socket becomes idle before the next status heartbeat. Flush
+              # user-space buffering; this does NOT claim power-loss durability,
+              # network latency, fsync per event or a new receipt convention.
+              if handle:handle.flush()
               if time.monotonic()-last_status>=STATUS_SECONDS:
                 if handle:handle.flush()
                 health['asOf']=stamp();atomic(STATE/'stock-capture.json',health);last_status=time.monotonic()
