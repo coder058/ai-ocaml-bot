@@ -182,11 +182,12 @@ export type PaperTelemetry = {
     sessionState: "awaiting_first_session" | "collecting" | "complete";
     instruments: number; frameSlots: number; streamInstruments: number;
     sessions: { fold: "discovery" | "validation"; openAt: string; closeAt: string }[];
-    stream: { labelCount: number; foldCounts: { discovery: number; validation: number }; longCandidateReferences: number; frozenFeatureCount: number };
-    rest: { labelCount: number; foldCounts: { discovery: number; validation: number }; longCandidateReferences: number; frozenFeatureCount: number };
+    stream: { labelCount: number; foldCounts: { discovery: number; validation: number }; longCandidateReferences: number; frozenFeatureCount: number; frameCounts?: Record<string,{frozenFeatureCount:number;quoteReferences:number}> };
+    rest: { labelCount: number; foldCounts: { discovery: number; validation: number }; longCandidateReferences: number; frozenFeatureCount: number; frameCounts?: Record<string,{frozenFeatureCount:number;quoteReferences:number}> };
     orderAuthority: false; winProbability: null; brokerPnl: null;
   } | null;
   marketPipeline?: MarketPipeline;
+  stockSessionQuoteAudit?: PaperTelemetry["stockQuoteAudit"];
   multiPaper?: {
     asOf: string;
     mode: "OBSERVE" | "PAPER_EXPERIMENT";
@@ -307,5 +308,5 @@ export function mergeOperational(broker: PaperTelemetry, value: unknown): PaperT
   if (auto && (auto.winProbability !== null || !Array.isArray(auto.ownedPositions) || auto.ownedPositions.some(p => !p || p.symbol === "AAPL"))) return broker;
   // Explicit whitelist: faster status cannot overwrite prices, positions,
   // fills, decision history, completeness flags or their original timestamps.
-  return { ...broker, marketPipeline: ops.marketPipeline, multiPaper: ops.multiPaper, connections: ops.connections, quoteAudit:ops.quoteAudit, stockQuoteAudit:ops.stockQuoteAudit };
+  return { ...broker, marketPipeline: ops.marketPipeline, multiPaper: ops.multiPaper, connections: ops.connections, quoteAudit:ops.quoteAudit, stockQuoteAudit:ops.stockQuoteAudit, stockSessionQuoteAudit:ops.stockSessionQuoteAudit };
 }

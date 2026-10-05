@@ -176,6 +176,12 @@ history. HIP-3 now separately receives native `1M` 30-day epoch blocks: these
 are not calendar months and actual short histories remain warming. Calendar-month
 HIP-3 history is unavailable; this descriptive context cannot authorize orders.
 
+[First-session stock opportunities](docs/STOCK-SESSION-OPPORTUNITIES.md) are a
+separate frozen research cohort for held source bars, including 4h. Actual new
+regular-session readings and quotes are retained without rewriting first-ever
+candle records or selecting later favorable signals. Its five-frame coverage is
+separate from broker fills; before-open zero counts do not justify activation.
+
 The 19 HIP-3 instruments also show current public open interest, funding,
 provider day volume and mark/oracle prices with actual receipt times. These are
 native provider quantities, not annualized funding or a historical OI trend.

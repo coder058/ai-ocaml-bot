@@ -29,6 +29,7 @@ from hip3_primary_context import collect as collect_hip3_primary_context
 from hip3_asset_context import collect as collect_hip3_asset_context
 from decision_quote_capture import collect as collect_decision_quotes
 from archived_quote_reference import augment as augment_archived_quotes
+from stock_session_opportunities import protocol as stock_opportunity_protocol, prepare as prepare_stock_opportunities
 
 # SOURCE: requested timeframes and official Alpaca / Hyperliquid interval names.
 FRAMES = {"1m": (1, "1Min"), "5m": (5, "5Min"), "30m": (30, "30Min"),
@@ -509,6 +510,31 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
                 target.write(json.dumps(decision, separators=(",", ":"), allow_nan=False) + "\n")
             target.flush()
             os.fsync(target.fileno())
+    # SOURCE: a separate prospective session cohort. First-ever candle records
+    # above remain immutable, including candles first seen after market close.
+    # Freeze all first regular-session statuses/quotes, not just later signals.
+    try:
+        stock_base, stock_spec, stock_digest = stock_opportunity_protocol()
+        result["engineSha256"] = engine_sha256
+        stock_seen = cache.setdefault("stockSessionOpportunities", {})
+        stock_records, stock_updates = prepare_stock_opportunities(result, clock, stock_seen,
+                                                                   stock_base, stock_spec, stock_digest)
+        stock_journal = output.with_name("stock-session-opportunities.jsonl")
+        if stock_records or not stock_journal.exists():
+            with stock_journal.open("a", encoding="utf-8") as target:
+                for record in stock_records:
+                    target.write(json.dumps(record, separators=(",", ":"), allow_nan=False) + "\n")
+                target.flush()
+                os.fsync(target.fileno())
+        stock_seen.update(stock_updates)
+        result["stockSessionOpportunities"] = {"selection": stock_spec["selection"],
+            "protocolSha256": stock_digest, "createdAt": stock_spec["createdAt"],
+            "newReadings": len(stock_records), "trackedSessionSlots": len(stock_seen),
+            "orderAuthority": False, "winProbability": None}
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        errors.append({"stage": "stock_session_opportunities", "error": type(error).__name__})
+        result["stockSessionOpportunities"] = {"status": "unavailable", "orderAuthority": False,
+                                                "winProbability": None}
     atomic(cache_path, cache)
     elapsed("evidence_and_cache_write")
     result["timingsSeconds"] = timings

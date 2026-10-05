@@ -754,7 +754,8 @@ def quote_audit_summary() -> dict | None:
 
 
 def stock_quote_audit_summary(manifest_path: Path | None = None, report_path: Path | None = None,
-                             expected_sha256: str = "6dc7d3b44459f6bf1a236f6237c9ca22272631acfccfe650c1dc718d39a40b75") -> dict | None:
+                             expected_sha256: str = "6dc7d3b44459f6bf1a236f6237c9ca22272631acfccfe650c1dc718d39a40b75",
+                             base_manifest_path: Path | None = None) -> dict | None:
     """Safe dated coverage only; no raw quote labels or return/fee estimates."""
     # SOURCE: actual pinned prospective manifest; this is not a policy authority.
     manifest_path = manifest_path or Path(__file__).resolve().parents[1]/"research/cohorts/stock-20261005-06.json"
@@ -763,6 +764,21 @@ def stock_quote_audit_summary(manifest_path: Path | None = None, report_path: Pa
         encoded = manifest_path.read_bytes()
         if hashlib.sha256(encoded).hexdigest() != expected_sha256: return None
         manifest, raw = json.loads(encoded), json.loads(report_path.read_text())
+        if base_manifest_path is not None:
+            # SOURCE: independently pinned companion and original calendar;
+            # selection stays a distinct research cohort, never first-ever bars.
+            base_raw = base_manifest_path.read_bytes()
+            base_hash = "6dc7d3b44459f6bf1a236f6237c9ca22272631acfccfe650c1dc718d39a40b75"
+            method = "first_regular_session_reading_per_source_bar"
+            if (hashlib.sha256(base_raw).hexdigest() != base_hash
+                    or manifest.get("baseManifestSha256") != base_hash
+                    or raw.get("baseManifestSha256") != base_hash
+                    or manifest.get("schema") != "stock_session_opportunity_protocol_v1"
+                    or manifest.get("selection") != method or raw.get("selection") != method
+                    or manifest.get("orderAuthority") is not False or manifest.get("winProbability") is not None): return None
+            base = json.loads(base_raw)
+            if datetime.fromisoformat(manifest["createdAt"].replace("Z", "+00:00")) < datetime.fromisoformat(base["createdAt"].replace("Z", "+00:00")): return None
+            manifest = {**base, "createdAt": manifest["createdAt"]}
         if (raw.get("manifestSha256") != expected_sha256 or raw.get("orderAuthority") is not False
                 or raw.get("winProbability") is not None or raw.get("brokerPnl") is not None): return None
         generated = datetime.fromisoformat(raw["generatedAt"].replace("Z", "+00:00"))
@@ -802,14 +818,30 @@ def stock_quote_audit_summary(manifest_path: Path | None = None, report_path: Pa
                 raise ValueError("invalid frozen candidate subset")
             candidates = count(policy["referenceCount"])
             if candidates > labels: raise ValueError("candidate count exceeds references")
+            features = sum(count(r.get("frozenProducerCandles",0)) for r in coverage)
+            if labels > features or any(count(r.get("quoteReferences",0)) > count(r.get("frozenProducerCandles",0)) for r in coverage):
+                raise ValueError("quote references exceed actual fingerprinted features")
             return {"labelCount": labels, "foldCounts": folds, "longCandidateReferences": candidates,
-                    "frozenFeatureCount": sum(count(r.get("frozenProducerCandles",0)) for r in coverage)}
+                    "frozenFeatureCount": features,
+                    "frameCounts": {frame: {
+                        "frozenFeatureCount": sum(count(r.get("frozenProducerCandles",0)) for r in coverage if r["frame"]==frame),
+                        "quoteReferences": sum(count(r.get("quoteReferences",0)) for r in coverage if r["frame"]==frame)}
+                        for frame in manifest["frames"]}}
         return {"schema":"prospective_stock_quote_summary_v1", "generatedAt":raw["generatedAt"],
                 "protocolFrozenAt":manifest["createdAt"], "sessionState":state,
                 "instruments":len(manifest["symbols"]), "frameSlots":len(allowed_slots), "streamInstruments":len(manifest["streamSymbols"]),
                 "sessions":sessions, "stream":source("streamExitAudit"), "rest":source("restExitAudit"),
                 "orderAuthority":False, "winProbability":None, "brokerPnl":None}
     except (OSError,ValueError,KeyError,TypeError,OverflowError,AttributeError): return None
+
+
+def stock_session_audit_summary() -> dict | None:
+    # SOURCE: actual companion protocol bytes frozen at 08:14:37.718943 UTC.
+    root = Path(__file__).resolve().parents[1]/"research/cohorts"
+    return stock_quote_audit_summary(root/"stock-session-opportunities-20261005-06.json",
+        STATE_DIR/"stock-session-audit/report.json",
+        "6d1300c7fc54d5ab3f19e78d97cd446b45bd189b9a271e13edd505227d2fa033",
+        root/"stock-20261005-06.json")
 
 
 def operational_snapshot() -> dict:
@@ -820,7 +852,8 @@ def operational_snapshot() -> dict:
     """
     document={"version":1,"source":"Dublin OCaml paper service",
         "generatedAt":datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
-        "connections":connection_state(),"quoteAudit":quote_audit_summary(),"stockQuoteAudit":stock_quote_audit_summary()}
+        "connections":connection_state(),"quoteAudit":quote_audit_summary(),"stockQuoteAudit":stock_quote_audit_summary(),
+        "stockSessionQuoteAudit":stock_session_audit_summary()}
     for name,filename in (("marketPipeline","market-pipeline.json"),("multiPaper","multi-paper.json")):
         try:
             document[name]=json.loads((STATE_DIR/filename).read_text())
@@ -862,6 +895,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "connections":connection_state(),
         "quoteAudit":quote_audit_summary(),
         "stockQuoteAudit":stock_quote_audit_summary(),
+        "stockSessionQuoteAudit":stock_session_audit_summary(),
         "journal": public_journal(events, orders),
         "journalComplete": journal_complete,
     }

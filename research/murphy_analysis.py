@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import numpy as np
 import talib
 from talib import abstract
+from forward_features import forward_reading
 
 # SOURCE: these are TA-Lib's published descriptive indicator groups, excluding
 # arithmetic transforms and functions that require a second independent asset.
@@ -331,25 +332,3 @@ def enrich(result, requested, frame_minutes):
             "Consolidated volume and open interest", "Strategy validation and probabilities"],
         "sources": ["https://ta-lib.org/functions/", "https://stockcharts.com/ten-laws/murphys-ten-laws.pdf"]}
     return result
-
-
-def forward_reading(reading):
-    """Keep actual first-observed features, without copying entire chart histories."""
-    compact = {key: value for key, value in reading.items() if key != "technicalSuite"}
-    suite = reading.get("technicalSuite", {})
-    geometry_values = suite.get("geometry", {})
-    compact["technicalEvidence"] = {
-        "source": suite.get("source"), "status": suite.get("status"),
-        "lastCandle": (suite.get("bars") or [None])[-1],
-        "contiguousBars": suite.get("contiguousBars"),
-        "patternValues": {name: row.get("value") for name, row in suite.get("patterns", {}).items()},
-        "indicatorValues": {name: row.get("values") if row.get("status") == "ready" else None
-                            for name, row in suite.get("indicators", {}).items()},
-        "geometry": {key: geometry_values.get(key) for key in
-                     ("support", "resistance", "retracements", "trendlines", "chartShapes")},
-        "divergences": suite.get("divergences", []),
-        "primaryContext": next((law.get("evidence", {}).get("primaryContext") for law in suite.get("murphy", []) if law.get("law") == 1), None),
-        "currentDerivativeContext": next((law.get("evidence", {}).get("currentDerivativeContext") for law in suite.get("murphy", []) if law.get("law") == 10), None),
-        "orderAuthority": False, "winProbability": None,
-    }
-    return compact

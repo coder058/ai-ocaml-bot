@@ -200,12 +200,18 @@ export function executionView(t: PaperTelemetry | null, now = Date.now()) {
        comparisonCount:audit.comparisonCount,horizonBars:audit.horizonBars,maxExitLagSeconds:audit.maxExitLagSeconds,splitAt:audit.splitAt,
        missingEntryQuotes:count(audit.rejected?.noFirstObservedFreshEntryQuote)?audit.rejected.noFirstObservedFreshEntryQuote:null,
        missingExitQuotes:count(audit.rejected?.noTimelyFreshExitReference)?audit.rejected.noTimelyFreshExitReference:null} : null;
-  const stock=t.stockQuoteAudit;
+  const checkedStockAudit=(stock: PaperTelemetry["stockQuoteAudit"]) => {
   const dated=(at: unknown): at is string => typeof at==="string" && Number.isFinite(Date.parse(at));
   const stockSource=(source: NonNullable<PaperTelemetry["stockQuoteAudit"]>["stream"] | undefined) => source && count(source.labelCount) &&
     count(source.foldCounts?.discovery) && count(source.foldCounts?.validation) && source.labelCount===source.foldCounts.discovery+source.foldCounts.validation &&
     count(source.longCandidateReferences) && source.longCandidateReferences<=source.labelCount && count(source.frozenFeatureCount) && source.labelCount<=source.frozenFeatureCount;
-  const stockQuoteAudit=stock && stock.schema==="prospective_stock_quote_summary_v1" && stock.orderAuthority===false && stock.winProbability===null && stock.brokerPnl===null &&
+  const frameCounts=(source: NonNullable<PaperTelemetry["stockQuoteAudit"]>["stream"]) => {
+    const rows=source.frameCounts;
+    return rows && Object.keys(rows).length===TRACE_FRAMES.length && TRACE_FRAMES.every(frame=>rows[frame] && count(rows[frame].frozenFeatureCount) && count(rows[frame].quoteReferences) && rows[frame].quoteReferences<=rows[frame].frozenFeatureCount) &&
+      TRACE_FRAMES.reduce((sum,frame)=>sum+rows[frame].quoteReferences,0)===source.labelCount && TRACE_FRAMES.reduce((sum,frame)=>sum+rows[frame].frozenFeatureCount,0)===source.frozenFeatureCount
+      ? TRACE_FRAMES.map(frame=>({frame,frozenFeatureCount:rows[frame].frozenFeatureCount,quoteReferences:rows[frame].quoteReferences})) : null;
+  };
+  return stock && stock.schema==="prospective_stock_quote_summary_v1" && stock.orderAuthority===false && stock.winProbability===null && stock.brokerPnl===null &&
     dated(stock.generatedAt) && Date.parse(stock.generatedAt)<=now && dated(stock.protocolFrozenAt) && Date.parse(stock.protocolFrozenAt)<=Date.parse(stock.generatedAt) &&
     count(stock.instruments) && stock.instruments>0 && count(stock.frameSlots) && stock.frameSlots===stock.instruments*TRACE_FRAMES.length &&
     count(stock.streamInstruments) && stock.streamInstruments<=stock.instruments && Array.isArray(stock.sessions) && stock.sessions.length===2 &&
@@ -215,8 +221,11 @@ export function executionView(t: PaperTelemetry | null, now = Date.now()) {
     stockSource(stock.stream) && stockSource(stock.rest)
     ? {generatedAt:stock.generatedAt,protocolFrozenAt:stock.protocolFrozenAt,sessionState:stock.sessionState,instruments:stock.instruments,frameSlots:stock.frameSlots,streamInstruments:stock.streamInstruments,
        sessions:stock.sessions.map(s=>({fold:s.fold,openAt:s.openAt,closeAt:s.closeAt})),
-       stream:{labelCount:stock.stream.labelCount,discovery:stock.stream.foldCounts.discovery,validation:stock.stream.foldCounts.validation,longCandidateReferences:stock.stream.longCandidateReferences,frozenFeatureCount:stock.stream.frozenFeatureCount},
-       rest:{labelCount:stock.rest.labelCount,discovery:stock.rest.foldCounts.discovery,validation:stock.rest.foldCounts.validation,longCandidateReferences:stock.rest.longCandidateReferences,frozenFeatureCount:stock.rest.frozenFeatureCount}} : null;
+       stream:{labelCount:stock.stream.labelCount,discovery:stock.stream.foldCounts.discovery,validation:stock.stream.foldCounts.validation,longCandidateReferences:stock.stream.longCandidateReferences,frozenFeatureCount:stock.stream.frozenFeatureCount,frameCounts:frameCounts(stock.stream)},
+       rest:{labelCount:stock.rest.labelCount,discovery:stock.rest.foldCounts.discovery,validation:stock.rest.foldCounts.validation,longCandidateReferences:stock.rest.longCandidateReferences,frozenFeatureCount:stock.rest.frozenFeatureCount,frameCounts:frameCounts(stock.rest)}} : null;
+  };
+  const stockQuoteAudit=checkedStockAudit(t.stockQuoteAudit);
+  const stockSessionQuoteAudit=checkedStockAudit(t.stockSessionQuoteAudit);
   return { generatedAt: t.generatedAt, analysisAsOf: t.marketPipeline?.asOf ?? null, retrievedAt: t.marketPipeline?.retrievedAt ?? null,
     traceStart: TRACE_START, orderAuthority: false as const, winProbability: null,
     cohortAccounting:cohortAccounting(t,now),
@@ -225,6 +234,7 @@ export function executionView(t: PaperTelemetry | null, now = Date.now()) {
     fx: t.connections?.fx ? { connected: t.connections.fx.connected, reason: t.connections.fx.reason, executionAdapterAvailable: t.connections.fx.executionAdapterAvailable } : null,
     quoteAudit,
     stockQuoteAudit,
+    stockSessionQuoteAudit,
     rows, orders: newOrders(t, now), ordersComplete: t.ordersComplete, fillsComplete: t.fillsComplete === true,
     explanation: "Five timeframes describe the same instrument. Current multiframe execution permits one owned ticket per instrument; the number of open positions is not a count of analyses or completed trades." };
 }

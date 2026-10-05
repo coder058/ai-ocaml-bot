@@ -84,6 +84,15 @@ test("prospective stock protocol displays actual planned scope and rejects autho
     assert.equal(executionView({...t,stockQuoteAudit:{...stock,...change}},laterNow).stockQuoteAudit,null);
   }
   assert.equal(executionView(fixture(),laterNow).stockQuoteAudit,null);
+  const frameCounts=Object.fromEntries(["1m","5m","30m","1h","4h"].map(f=>[f,{frozenFeatureCount:0,quoteReferences:0,secret:"PRIVATE"}]));
+  const session={...stock,stream:{...source,frameCounts},rest:{...source,frameCounts}};
+  const both=executionView({...t,stockSessionQuoteAudit:session},laterNow);
+  assert.equal(both.stockQuoteAudit.protocolFrozenAt,stock.protocolFrozenAt);
+  assert.equal(both.stockSessionQuoteAudit.stream.frameCounts.length,5);
+  assert.equal(JSON.stringify(both).includes("PRIVATE"),false);
+  const broken={...session,stream:{...source,frameCounts:{...frameCounts,"4h":{frozenFeatureCount:0,quoteReferences:1}}}};
+  assert.equal(executionView({...t,stockSessionQuoteAudit:broken},laterNow).stockSessionQuoteAudit.stream.frameCounts,null);
+  assert.equal(executionView({...t,stockSessionQuoteAudit:{...session,orderAuthority:true}},laterNow).stockSessionQuoteAudit,null);
 });
 
 test("stale or future runtime/analysis never reports current gate readiness or a current candidate", () => {

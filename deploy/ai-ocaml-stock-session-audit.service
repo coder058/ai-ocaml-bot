@@ -1,0 +1,18 @@
+[Unit]
+Description=AI OCaml Bot separate first-session quote references, read-only
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=TZ=UTC
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+# SOURCE: exact prospective pinned companion, existing private data inputs.
+# No credential file, network access, order route or execution flag.
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/.venv/bin/python research/stock_session_opportunities.py --journal /home/ubuntu/jsbot-paper-state/stock-session-opportunities.jsonl --rest-quotes /home/ubuntu/jsbot-paper-state/market-quotes-reference.jsonl --capture-root /home/ubuntu/jsbot-paper-state/market-capture/iex --output /home/ubuntu/jsbot-paper-state/stock-session-audit/report.json
+ExecStartPost=/usr/bin/python3 deploy/retain_stock_audit.py --report /home/ubuntu/jsbot-paper-state/stock-session-audit/report.json
+NoNewPrivileges=true
+PrivateNetwork=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state/stock-session-audit

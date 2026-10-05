@@ -30,6 +30,34 @@ from export_telemetry import (  # noqa: E402
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_separate_session_protocol_is_pinned_and_exposes_only_checked_per_frame_counts(self):
+        import hashlib
+        from datetime import timedelta
+        root=Path(__file__).resolve().parents[1]/"research/cohorts"
+        bp=root/"stock-20261005-06.json"; mp=root/"stock-session-opportunities-20261005-06.json"
+        base=json.loads(bp.read_bytes()); spec=json.loads(mp.read_bytes()); digest=hashlib.sha256(mp.read_bytes()).hexdigest()
+        # SOURCE: synthetic report one second after the actual protocol freeze.
+        generated=(datetime.fromisoformat(spec['createdAt'].replace('Z','+00:00'))+timedelta(seconds=1)).isoformat().replace('+00:00','Z')
+        audit={"schema":"prospective_stock_quote_reference_v1","generatedAt":generated,
+            "sessionState":"awaiting_first_session","orderAuthority":False,"winProbability":None,"brokerPnl":None,
+            "equityNetCosts":None,"executionModel":None,"labelCount":0,"foldCounts":{},
+            "coverage":[{"symbol":s,"frame":f} for s in base['symbols'] for f in base['frames']],
+            "labels":[{"private":"PRIVATE"}],"frozenPolicySubset":{"policy":base['policy'],"side":"long",
+                "orderAuthority":False,"winProbability":None,"referenceCount":0}}
+        raw={"generatedAt":generated,"manifestSha256":digest,"baseManifestSha256":spec['baseManifestSha256'],
+             "selection":spec['selection'],"streamExitAudit":audit,"restExitAudit":audit,
+             "orderAuthority":False,"winProbability":None,"brokerPnl":None}
+        with tempfile.TemporaryDirectory() as d:
+            rp=Path(d)/'report.json'; rp.write_text(json.dumps(raw))
+            safe=stock_quote_audit_summary(mp,rp,digest,bp)
+            self.assertEqual(safe['protocolFrozenAt'],spec['createdAt'])
+            self.assertEqual(set(safe['stream']['frameCounts']),set(base['frames']))
+            self.assertEqual(safe['stream']['frameCounts']['4h'],{'frozenFeatureCount':0,'quoteReferences':0})
+            self.assertNotIn('PRIVATE',json.dumps(safe))
+            for changes in ({'baseManifestSha256':'changed'},{'selection':'first_ever_candle'},
+                            {'orderAuthority':True},{'manifestSha256':spec['baseManifestSha256']}):
+                rp.write_text(json.dumps({**raw,**changes}));self.assertIsNone(stock_quote_audit_summary(mp,rp,digest,bp))
+
     def test_pinned_stock_audit_coverage_does_not_publish_quotes_returns_private_fields_or_authority(self):
         import hashlib
         # SOURCE: synthetic prospective manifest/report, not broker observations.
@@ -56,6 +84,7 @@ class DecisionHistoryTests(unittest.TestCase):
                 {"manifestSha256":"changed"},{"generatedAt":"2099-01-01T00:00:00Z"},
                 {"streamExitAudit":{**audit,"labelCount":True}},
                 {"streamExitAudit":{**audit,"coverage":[]}},
+                {"streamExitAudit":{**audit,"labelCount":1,"foldCounts":{"discovery":1},"coverage":[{"symbol":"QQQ","frame":"1m","quoteReferences":1}]}},
                 {"streamExitAudit":{**audit,"sessionState":"complete"}},
                 {"streamExitAudit":{**audit,"equityNetCosts":0}}):
                 rp.write_text(json.dumps({**raw,**changes}));self.assertIsNone(stock_quote_audit_summary(mp,rp,digest))

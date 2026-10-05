@@ -115,6 +115,9 @@ are actual short listing histories, not an implementation failure to synthesize
 missing years. Calendar-month HIP-3 context and full Murphy confirmation remain
 incomplete. No broker execution or policy activation was added.
 
+By the actual 08:26 cache check, all 19 native `1M` summaries were received;
+all remained warming. Receipt completeness does not supply missing EMA50 years.
+
 Ten adapter tests passed locally and on Dublin, nine pipeline and nine Murphy
 regressions on Dublin; 45 frontend tests and production build/typecheck passed.
 Browser EUR 1h verified the actual native dates, individual receipt, unavailable

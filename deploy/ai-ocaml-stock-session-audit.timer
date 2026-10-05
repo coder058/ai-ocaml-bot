@@ -1,0 +1,13 @@
+[Unit]
+Description=AI OCaml Bot dated session-opportunity validation
+
+[Timer]
+# SOURCE: unchanged base cohort's October 5-6 sessions, UTC timer syntax.
+# GUESS: # UNCALIBRATED GUESS — inherited five-minute descriptive research
+# cadence, not calibrated execution latency, holding period or alpha.
+OnCalendar=2026-10-05..06 13..20:00/5:00 UTC
+Unit=ai-ocaml-stock-session-audit.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

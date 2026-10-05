@@ -1,0 +1,19 @@
+{
+  "schema": "stock_session_opportunity_protocol_v1",
+  "baseManifestSha256": "6dc7d3b44459f6bf1a236f6237c9ca22272631acfccfe650c1dc718d39a40b75",
+  "createdAt": "2026-10-05T08:14:37.718943Z",
+  "selection": "first_regular_session_reading_per_source_bar",
+  "orderAuthority": false,
+  "winProbability": null,
+  "parameterProvenance": {
+    "selection": "# GUESS: # UNCALIBRATED GUESS — first actual regular-session reading per date/symbol/frame/source bar; avoids relabeling first-ever closed-session features, but is not calibrated execution timing",
+    "sessions": "# SOURCE: exact existing frozen base manifest calendar/folds/scope/engine; unchanged",
+    "horizon": "# GUESS: # UNCALIBRATED GUESS — inherited one frame and 120-second exit lag; no next-session repair"
+  },
+  "limitations": [
+    "Original first-ever-candle journal and audit remain separate and unchanged",
+    "Same older closed source candle may be evaluated in a new session only with actual newly observed features and quotes",
+    "All statuses and missing quotes remain frozen; no selecting a later favorable candidate",
+    "No orders, calibrated probabilities, execution model or net P&L"
+  ]
+}
