@@ -63,14 +63,14 @@ class DecisionHistoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/"stock-events.jsonl"
             # SOURCE: synthetic exact identity and timestamp fixture, not a trade.
-            event={"kind":"DECISION","at":"2026-10-04T20:00:00Z","clientOrderId":"aibotstkAuto",
-                "reason":"Synthetic confluence","detail":{"policy":"trend_candle_confluence_v1","frame":"4h",
+            event={"kind":"DECISION","at":"2026-10-04T20:00:00Z","clientOrderId":"aibotstkAuto","symbol":"QQQ",
+                "reason":"Synthetic confluence","detail":{"symbol":"QQQ","side":"buy","policy":"trend_candle_confluence_v1","frame":"4h",
                 "signalBar":"2026-10-04T12:00:00Z","invalidationLevel":99,"accountId":"PRIVATE",
                 "reading":{"ema20":100,"ema50":99,"candleShapes":["hammer_shape"]},
                 "preflight":{"accountReady":True,"regularSessionOpen":True,"buyingPowerChecked":True,
                     "buyingPowerSufficient":True,"quoteTime":"2026-10-04T19:59:59Z","bid":100,"ask":101,"secret":"PRIVATE"}}}
             path.write_text(json.dumps(event)+"\n"+json.dumps([])+"\n")
-            result=stock_order_evidence([{"id":"exact","clientOrderId":"aibotstkAuto","symbol":"QQQ"},
+            result=stock_order_evidence([{"id":"exact","clientOrderId":"aibotstkAuto","symbol":"QQQ","side":"buy","submittedAt":"2026-10-04T20:00:01Z"},
                 {"id":"neighbor","clientOrderId":"aibotstkOther","symbol":"QQQ"}],path)
             self.assertEqual(set(result),{"exact"})
             self.assertEqual(result["exact"]["policy"],"trend_candle_confluence_v1")
@@ -118,12 +118,12 @@ class DecisionHistoryTests(unittest.TestCase):
     def test_multiframe_reason_joins_exact_client_order_id(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            path.write_text(json.dumps({"kind": "DECISION", "clientOrderId": "jsbotmtfone", "at": "2026-10-04T19:49:59Z",
+            path.write_text(json.dumps({"kind": "DECISION", "clientOrderId": "jsbotmtfone", "at": "2026-10-04T19:49:59Z","symbol":"ETH/USD","side":"buy",
                 "policy": "trend_candle_confluence_v1", "frame": "4h", "signalBar": "synthetic",
                 "reason": "Synthetic reason", "reading": {"ema20": 100, "ema50": 99,
                     "candleShapes": ["hammer_shape"], "triggerBid": 101}}) + "\n")
             evidence = multi_order_evidence([
-                {"id": "one", "clientOrderId": "jsbotmtfone", "symbol": "ETHUSD"},
+                {"id": "one", "clientOrderId": "jsbotmtfone", "symbol": "ETHUSD","side":"buy","submittedAt":"2026-10-04T19:50:00Z"},
                 {"id": "two", "clientOrderId": "jsbotmtftwo", "symbol": "ETHUSD"}], path)
             self.assertEqual(set(evidence), {"one"})
             self.assertEqual(evidence["one"]["frame"], "4h")
@@ -138,6 +138,31 @@ class DecisionHistoryTests(unittest.TestCase):
         self.assertTrue(fees["attributedToBot"])
         self.assertEqual(fees["btcFeeQty"], "0")
         self.assertEqual(fees["assetFees"]["ETH/USD"]["qty"], "-0.001")
+
+    def test_stock_and_multiframe_evidence_reject_ambiguous_identity_side_and_causal_clocks(self):
+        # SOURCE: synthetic exact nanosecond boundary and corrupted journals;
+        # ordering cannot choose one of contradictory retained decisions.
+        for fn,cid,symbol in [(stock_order_evidence,'aibotstkExact','QQQ'),(multi_order_evidence,'jsbotmtfExact','ETH/USD')]:
+            with self.subTest(route=cid),tempfile.TemporaryDirectory() as directory:
+                p=Path(directory)/'events.jsonl'
+                order={'id':'exact','clientOrderId':cid,'symbol':symbol,'side':'buy','submittedAt':'2026-10-04T20:00:01.123456789Z'}
+                row={'kind':'DECISION','clientOrderId':cid,'symbol':symbol,'side':'buy','at':'2026-10-04T20:00:01.123456Z',
+                    'policy':'trend_candle_confluence_v1','reading':{},'detail':{'symbol':symbol,'side':'buy'}}
+                def run(rows,orders=None):
+                    p.write_text('\n'.join(json.dumps(r) for r in rows)+'\n')
+                    return fn(orders or [order],p)
+                self.assertEqual(set(run([row,row])),{'exact'})
+                self.assertEqual(run([row,{**row,'reason':'contradiction'}]),{})
+                for change in [{'symbol':'NVDA'},{'side':'sell','detail':{'symbol':symbol,'side':'sell'}},
+                    {'at':'2026-10-04T20:00:01.123456790Z'},{'at':'2026-10-04T20:00:01Z'},
+                    {'at':'missing'},{'symbol':None},{'detail':[],'side':None}]:
+                    with self.subTest(change=change):self.assertEqual(run([{**row,**change}]),{})
+                self.assertEqual(run([row],[order,{**order,'id':'other'}]),{})
+                self.assertEqual(run([row],[{**order,'side':None}]),{})
+                self.assertEqual(run([row],[{**order,'submittedAt':None}]),{})
+                for malformed in [[],{'candleShapes':[1]},{'candleShapes':'hammer'}]:
+                    change={'detail':{**row['detail'],'reading':malformed}} if fn==stock_order_evidence else {'reading':malformed}
+                    self.assertEqual(run([{**row,**change}]),{})
 
     def test_market_projection_omits_private_capture_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

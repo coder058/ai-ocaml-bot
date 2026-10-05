@@ -544,54 +544,75 @@ def connection_state() -> dict:
     return result
 
 
-def stock_order_evidence(orders:list[dict],path:Path=STATE_DIR/"stock-paper-events.jsonl") -> dict:
-    by_client={row["clientOrderId"]:row["id"] for row in orders if
-        str(row.get("clientOrderId","")).startswith("aibotstk") and lab_order(row.get("clientOrderId"),row.get("symbol"))}
-    evidence={}
-    if not path.exists():return evidence
+def joined_decisions(orders: list[dict], path: Path, prefix: str):
+    """Exact identity and causal time; conflicting events cannot win by order."""
+    by_client, ambiguous = {}, set()
+    for order in orders:
+        cid=order.get("clientOrderId")
+        if (not isinstance(cid,str) or not cid.startswith(prefix) or not lab_order(cid,order.get("symbol"))
+                or not isinstance(order.get("id"),str) or not order["id"] or order.get("side") not in ("buy","sell")):continue
+        if cid in by_client and by_client[cid]!=order:ambiguous.add(cid)
+        by_client[cid]=order
+    events={}
+    if not path.exists():return []
     for line in path.read_text().splitlines():
         try:row=json.loads(line)
         except ValueError:continue
-        if isinstance(row,dict) and row.get("kind")=="DECISION" and row.get("clientOrderId") in by_client:
-            evidence[by_client[row["clientOrderId"]]]={"policy":"explicit_stock_paper_request",
-                "reason":str(row.get("reason","")),"observedAt":str(row.get("at","")),"frame":"manual"}
-            detail=row.get("detail",{})
-            if isinstance(detail,dict) and detail.get("policy")=="trend_candle_confluence_v1":
-                reading=detail.get("reading",{})
-                if not isinstance(reading,dict):reading={}
-                values={"policy":detail["policy"],"frame":detail.get("frame"),"signal_bar":detail.get("signalBar"),
-                    "invalidation_level":detail.get("invalidationLevel"),"ema20":reading.get("ema20"),
-                    "ema50":reading.get("ema50"),"rsi14":reading.get("rsi14"),"trend":reading.get("trend"),
-                    "candle_shapes":", ".join(reading.get("candleShapes",[]))}
-                preflight=detail.get("preflight",{})
-                if isinstance(preflight,dict):
-                    values.update({"trigger_bid":preflight.get("bid"),"trigger_ask":preflight.get("ask"),
-                        "trigger_quote_time":preflight.get("quoteTime"),"preflight_evidence":json.dumps({key:preflight.get(key)
-                        for key in ("regularSessionOpen","accountReady","buyingPowerChecked","buyingPowerSufficient",
-                                    "brokerQuantity","ownedQuantity","existingOrders")})})
-                evidence[by_client[row["clientOrderId"]]].update({key:str(value) for key,value in values.items() if value is not None})
+        if not isinstance(row,dict) or row.get("kind")!="DECISION":continue
+        cid=row.get("clientOrderId")
+        if not isinstance(cid,str) or cid not in by_client:continue
+        if cid in events and events[cid]!=row:ambiguous.add(cid)
+        events[cid]=row
+    matched=[]
+    for cid,row in events.items():
+        if cid in ambiguous:continue
+        order=by_client[cid]
+        detail=row.get("detail") if prefix=="aibotstk" else row
+        if (not isinstance(detail,dict) or public_symbol(row.get("symbol"))!=public_symbol(order.get("symbol"))
+                or detail.get("side")!=order.get("side")
+                or prefix=="aibotstk" and public_symbol(detail.get("symbol"))!=public_symbol(order.get("symbol"))):continue
+        try:
+            at=exact_utc_clock(row["at"])
+            # SOURCE: old journal timestamps represent a complete one-second
+            # interval; do not invent subsecond order against broker clocks.
+            end=at+(Decimal(1) if re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ",row["at"]) else Decimal(0))
+            if end>exact_utc_clock(order["submittedAt"]):continue
+        except (ValueError,TypeError,KeyError):continue
+        matched.append((order,row))
+    return matched
+
+
+def stock_order_evidence(orders:list[dict],path:Path=STATE_DIR/"stock-paper-events.jsonl") -> dict:
+    evidence={}
+    for order,row in joined_decisions(orders,path,"aibotstk"):
+        detail=row.get("detail",{})
+        if "policy" in detail and detail["policy"]!="trend_candle_confluence_v1":continue
+        reading=detail.get("reading",{})
+        if not isinstance(reading,dict) or not isinstance(reading.get("candleShapes",[]),list) or not all(isinstance(shape,str) for shape in reading.get("candleShapes",[])):continue
+        evidence[order["id"]]={"policy":"explicit_stock_paper_request",
+            "reason":str(row.get("reason","")),"observedAt":str(row.get("at","")),"frame":"manual"}
+        if isinstance(detail,dict) and detail.get("policy")=="trend_candle_confluence_v1":
+            values={"policy":detail["policy"],"frame":detail.get("frame"),"signal_bar":detail.get("signalBar"),
+                "invalidation_level":detail.get("invalidationLevel"),"ema20":reading.get("ema20"),
+                "ema50":reading.get("ema50"),"rsi14":reading.get("rsi14"),"trend":reading.get("trend"),
+                "candle_shapes":", ".join(reading.get("candleShapes",[]))}
+            preflight=detail.get("preflight",{})
+            if isinstance(preflight,dict):
+                values.update({"trigger_bid":preflight.get("bid"),"trigger_ask":preflight.get("ask"),
+                    "trigger_quote_time":preflight.get("quoteTime"),"preflight_evidence":json.dumps({key:preflight.get(key)
+                    for key in ("regularSessionOpen","accountReady","buyingPowerChecked","buyingPowerSufficient",
+                                "brokerQuantity","ownedQuantity","existingOrders")})})
+            evidence[order["id"]].update({key:str(value) for key,value in values.items() if value is not None})
     return evidence
 
 
 def multi_order_evidence(orders: list[dict],
                          path: Path = STATE_DIR / "multi-paper-events.jsonl") -> dict[str, dict[str, str]]:
     """Join an explicit client order ID, never the nearest technical reading."""
-    by_client = {row["clientOrderId"]: row["id"] for row in orders
-                 if lab_order(row.get("clientOrderId"), row.get("symbol"))}
     result = {}
-    if not path.exists():
-        return result
-    for line in path.read_text().splitlines():
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue  # SOURCE: a torn last append cannot invent decision evidence.
-        if not isinstance(row, dict):
-            continue
-        client_id = row.get("clientOrderId")
-        if row.get("kind") != "DECISION" or client_id not in by_client:
-            continue
+    for order,row in joined_decisions(orders,path,"jsbotmtf"):
         reading = row.get("reading", {})
+        if not isinstance(reading,dict) or not isinstance(reading.get("candleShapes",[]),list) or not all(isinstance(shape,str) for shape in reading.get("candleShapes",[])):continue
         values = {"policy": row.get("policy"), "reason": row.get("reason"), "observedAt": row.get("at"),
             "frame": row.get("frame"), "signal_bar": row.get("signalBar"),
             "invalidation_level": reading.get("invalidationLevel"),
@@ -601,7 +622,7 @@ def multi_order_evidence(orders: list[dict],
             "candle_shapes": ", ".join(reading.get("candleShapes", [])),
             "bar_close": reading.get("close"), "trigger_bid": reading.get("triggerBid"),
             "trigger_ask": reading.get("triggerAsk"), "trigger_quote_time": reading.get("triggerQuoteTime")}
-        result[by_client[client_id]] = {key: str(value) for key, value in values.items()
+        result[order["id"]] = {key: str(value) for key, value in values.items()
                                       if value is not None}
     return result
 
