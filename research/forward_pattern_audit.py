@@ -64,6 +64,7 @@ def observation(record):
             "patterns": patterns, "status": reading.get("status"),
             "observedAtText": record["observedAt"], "quoteReference": reading.get("quoteReference"),
             "policy":record.get("policy"),"candidate":reading.get("candidate"),
+            "engineSha256":record.get("engineSha256"),
             "source": evidence.get("source") or suite.get("source")}
 
 

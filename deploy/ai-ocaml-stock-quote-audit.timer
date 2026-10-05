@@ -1,0 +1,14 @@
+[Unit]
+Description=AI OCaml Bot dated stock quote research window
+
+[Timer]
+# SOURCE: broker calendar in the pinned October 5/6 protocol, UTC converted
+# from actual New York regular hours. Limited dates, no recurring later days.
+# GUESS: # UNCALIBRATED GUESS — five-minute local research refresh; measure
+# journal processing/resources. Cadence is not execution speed or alpha.
+OnCalendar=2026-10-05..06 13..20:00/5:00 UTC
+Persistent=true
+Unit=ai-ocaml-stock-quote-audit.service
+
+[Install]
+WantedBy=timers.target

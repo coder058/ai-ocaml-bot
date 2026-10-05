@@ -1,0 +1,19 @@
+[Unit]
+Description=AI OCaml Bot frozen stock quote research, read-only
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=TZ=UTC
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+# SOURCE: pinned prospective protocol bytes and actual existing capture paths.
+# No credential file, network calls, broker adapter or execution flag.
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/.venv/bin/python research/stock_quote_audit.py --manifest research/cohorts/stock-20261005-06.json --manifest-sha256 6dc7d3b44459f6bf1a236f6237c9ca22272631acfccfe650c1dc718d39a40b75 --journal /home/ubuntu/jsbot-paper-state/market-frame-decisions.jsonl --rest-quotes /home/ubuntu/jsbot-paper-state/market-quotes-reference.jsonl --capture-root /home/ubuntu/jsbot-paper-state/market-capture/iex --output /home/ubuntu/jsbot-paper-state/stock-quote-audit/report.json
+ExecStartPost=/usr/bin/python3 deploy/retain_stock_audit.py --report /home/ubuntu/jsbot-paper-state/stock-quote-audit/report.json
+NoNewPrivileges=true
+PrivateNetwork=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state/stock-quote-audit

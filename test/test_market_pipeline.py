@@ -6,6 +6,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research"))
 from market_pipeline import RestBudget, alpaca_bars, merge, normalize, session_slots, relevant_calendar, request, HL_INFO  # noqa: E402
@@ -16,6 +17,27 @@ NOW = datetime(2026, 10, 1, 12, 1, tzinfo=timezone.utc)
 
 
 class PipelineTests(unittest.TestCase):
+    def test_used_analyzer_identity_and_replacement_during_actual_invocation_fail_closed(self):
+        from market_pipeline import analyze_fingerprinted
+        import hashlib
+        # SOURCE: synthetic executable bytes and subprocess replies, no market data.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/"analyzer"; path.write_bytes(b"frozen analyzer")
+            ok = SimpleNamespace(returncode=0, stdout=b'{"markets":[]}')
+            with patch("market_pipeline.subprocess.run", return_value=ok) as run:
+                result, fingerprint = analyze_fingerprinted({"markets":[]}, path)
+                self.assertEqual(result,{"markets":[]})
+                self.assertEqual(fingerprint,hashlib.sha256(b"frozen analyzer").hexdigest())
+                self.assertEqual(run.call_args.args[0],[str(path)])
+            def replace(*args, **kwargs):
+                path.write_bytes(b"different analyzer"); return ok
+            with patch("market_pipeline.subprocess.run", side_effect=replace):
+                with self.assertRaisesRegex(RuntimeError,"changed"):
+                    analyze_fingerprinted({"markets":[]},path)
+            with patch("market_pipeline.subprocess.run",return_value=SimpleNamespace(returncode=1)):
+                with self.assertRaisesRegex(RuntimeError,"failed"):
+                    analyze_fingerprinted({"markets":[]},path)
+
     def test_native_primary_requests_use_documented_budget_without_intraday_key_error(self):
         # SOURCE: synthetic 52-week ranges validate default weight 20 +
         # ceil(estimated maximum rows / documented 60), no network calls.

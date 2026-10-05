@@ -7,6 +7,7 @@ native provider bars prevent a lost 1m stream message from erasing a 4h frame.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -165,6 +166,18 @@ def paper_get(path: str, credentials: dict) -> object:
     if not (path.startswith("/v2/assets?") or path.startswith("/v2/calendar?") or path == "/v2/clock"):
         raise ValueError("scanner broker path is outside the read-only allowlist")
     return request(PAPER_ORIGIN + path, credentials)
+
+
+def analyze_fingerprinted(payload: dict, engine: Path):
+    """Retain actual analyzer identity; a concurrent replacement fails closed."""
+    engine_sha256 = hashlib.sha256(engine.read_bytes()).hexdigest()
+    proc = subprocess.run([str(engine)], input=json.dumps(payload).encode(),
+                          capture_output=True, timeout=TIMEOUT_SECONDS, check=False)
+    if proc.returncode:
+        raise RuntimeError("shared OCaml analysis failed")
+    if hashlib.sha256(engine.read_bytes()).hexdigest() != engine_sha256:
+        raise RuntimeError("shared OCaml analyzer changed during the scan")
+    return json.loads(proc.stdout), engine_sha256
 
 
 def merge(prior: list[dict], new: list[dict]) -> list[dict]:
@@ -435,11 +448,9 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
             "missing": primary_context.get("missing", "Native primary context unavailable"),
             "errors": primary_context.get("errors", []), "orderAuthority": False, "winProbability": None})
     payload = {"asOf": utc(final_as_of), "markets": requested}
-    proc = subprocess.run([str(engine)], input=json.dumps(payload).encode(),
-                          capture_output=True, timeout=TIMEOUT_SECONDS, check=False)
-    if proc.returncode:
-        raise RuntimeError("shared OCaml analysis failed")
-    result = json.loads(proc.stdout)
+    # SOURCE: fingerprint the actual deployed analyzer before and after use;
+    # subsequent first observations retain it without repairing old journals.
+    result, engine_sha256 = analyze_fingerprinted(payload, engine)
     elapsed("shared_ocaml_analysis")
     enrich(result, requested, {name: minutes for name, (minutes, _) in FRAMES.items()})
     elapsed("descriptive_technical_analysis")
@@ -485,7 +496,8 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
             if bar_start and emitted.get(key, "") < bar_start:
                 decisions.append({"observedAt": result["retrievedAt"], "asOf": result["asOf"],
                     "venue": market["venue"], "symbol": market["symbol"], "frame": frame,
-                    "policy": result["policy"], "reading": forward_reading(reading), "orderAuthority": False})
+                    "policy": result["policy"], "engineSha256": engine_sha256,
+                    "reading": forward_reading(reading), "orderAuthority": False})
                 emitted[key] = bar_start
     if decisions:
         # SOURCE: append-only operational forward evidence, not broker executions.
@@ -499,6 +511,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     result["timingsSeconds"] = timings
     result["archiveQuoteCoverage"] = archive_quote_coverage
     result["newFrameDecisions"] = len(decisions)
+    result["engineSha256"] = engine_sha256
     result["currentCandidates"] = sum(reading.get("candidate") is not None
         for market in result["markets"] for reading in market["frames"].values())
     atomic(output, result)

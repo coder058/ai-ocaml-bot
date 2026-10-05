@@ -53,7 +53,18 @@ export default function ExecutionDesk() {
       <div className="coverage-strip">{Object.entries(view.dataCounts).map(([state, count]) => <span key={state}>{count} {state.replaceAll("_", " ")}</span>)}</div>
       {view.fx && !view.fx.connected && <p className="execution-note">Spot FX connection: {view.fx.reason.replaceAll("_", " ")}. Hyperliquid FX-like products are public analysis; no spot-FX paper execution is implied.</p>}
       <details className="cohort-order" aria-label="Quote reference research audit"><summary><strong>Pattern policy validation</strong><span>Not validated for execution</span><small>{view.quoteAudit ? `${view.quoteAudit.labelCount} quote references · dated research snapshot` : "Quote research unavailable"}</small></summary>
-        <div className="cohort-detail">{view.quoteAudit ? <>
+        <div className="cohort-detail">{view.stockQuoteAudit ? <section aria-label="Prospective stock quote validation">
+          <h3>Stocks / ETF · prospective quote validation</h3>
+          <p>Report: {stamp(view.stockQuoteAudit.generatedAt)}. {view.stockQuoteAudit.sessionState === "awaiting_first_session" ? "Awaiting the first regular session." : view.stockQuoteAudit.sessionState === "complete" ? "The fixed collection window has ended; this does not mean the policy passed." : "Collecting original first-observed evidence."} Planned scope: {view.stockQuoteAudit.instruments} instruments / {view.stockQuoteAudit.frameSlots} frame slots.</p>
+          <dl><div><dt>Discovery session · UTC</dt><dd>{stamp(view.stockQuoteAudit.sessions[0].openAt)} → {stamp(view.stockQuoteAudit.sessions[0].closeAt)}</dd></div>
+            <div><dt>Later session · UTC</dt><dd>{stamp(view.stockQuoteAudit.sessions[1].openAt)} → {stamp(view.stockQuoteAudit.sessions[1].closeAt)}</dd></div>
+            <div><dt>Original features with frozen analyzer identity</dt><dd>{view.stockQuoteAudit.stream.frozenFeatureCount}</dd></div>
+            <div><dt>Stream exit references · IEX</dt><dd>{view.stockQuoteAudit.stream.labelCount} · {view.stockQuoteAudit.stream.discovery} discovery / {view.stockQuoteAudit.stream.validation} later · {view.stockQuoteAudit.stream.longCandidateReferences} recorded long candidates</dd></div>
+            <div><dt>Same-input REST exit comparison</dt><dd>{view.stockQuoteAudit.rest.labelCount} · {view.stockQuoteAudit.rest.longCandidateReferences} recorded long candidates</dd></div>
+            <div><dt>Stream subscription / monitored instruments</dt><dd>{view.stockQuoteAudit.streamInstruments} / {view.stockQuoteAudit.instruments} · IEX is not full NBBO</dd></div></dl>
+          <p>Protocol fixed at {stamp(view.stockQuoteAudit.protocolFrozenAt)}. Read-only research, no order authority or net-cost execution model. Two sessions are an uncalibrated exploratory design; correlated charts and price references cannot establish winning probabilities or live profitability. Missing original quotes stay missing.</p>
+        </section> : <p>Prospective stock quote audit unavailable.</p>}
+        {view.quoteAudit ? <><h3>Earlier crypto quote-reference attempt</h3>
           <p>Report: {stamp(view.quoteAudit.generatedAt)}. {view.quoteAudit.discovery} discovery / {view.quoteAudit.validation} later-fold references; {view.quoteAudit.comparisonCount} exploratory pattern comparisons. Related frames overlap; these are not independent trades.</p>
           <dl><div><dt>Missing fresh first entry quotes</dt><dd>{view.quoteAudit.missingEntryQuotes ?? "Unknown"}</dd></div><div><dt>No timely fresh exit</dt><dd>{view.quoteAudit.missingExitQuotes ?? "Unknown"}</dd></div><div><dt>Frozen reference horizon / exit lag limit</dt><dd>{view.quoteAudit.horizonBars} frame duration / {view.quoteAudit.maxExitLagSeconds}s · uncalibrated research choices</dd></div></dl>
           {view.quoteAudit.discovery===0 && <p className="alert">No quote-aware discovery sample. This later fold cannot validate a previously selected quote policy.</p>}

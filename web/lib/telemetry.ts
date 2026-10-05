@@ -177,6 +177,15 @@ export type PaperTelemetry = {
     labelCount: number; foldCounts: { discovery: number; validation: number }; comparisonCount: number;
     horizonBars: number; maxExitLagSeconds: number; splitAt: string; rejected: Record<string, number>;
   } | null;
+  stockQuoteAudit?: {
+    schema: "prospective_stock_quote_summary_v1"; generatedAt: string; protocolFrozenAt: string;
+    sessionState: "awaiting_first_session" | "collecting" | "complete";
+    instruments: number; frameSlots: number; streamInstruments: number;
+    sessions: { fold: "discovery" | "validation"; openAt: string; closeAt: string }[];
+    stream: { labelCount: number; foldCounts: { discovery: number; validation: number }; longCandidateReferences: number; frozenFeatureCount: number };
+    rest: { labelCount: number; foldCounts: { discovery: number; validation: number }; longCandidateReferences: number; frozenFeatureCount: number };
+    orderAuthority: false; winProbability: null; brokerPnl: null;
+  } | null;
   marketPipeline?: MarketPipeline;
   multiPaper?: {
     asOf: string;
@@ -298,5 +307,5 @@ export function mergeOperational(broker: PaperTelemetry, value: unknown): PaperT
   if (auto && (auto.winProbability !== null || !Array.isArray(auto.ownedPositions) || auto.ownedPositions.some(p => !p || p.symbol === "AAPL"))) return broker;
   // Explicit whitelist: faster status cannot overwrite prices, positions,
   // fills, decision history, completeness flags or their original timestamps.
-  return { ...broker, marketPipeline: ops.marketPipeline, multiPaper: ops.multiPaper, connections: ops.connections, quoteAudit:ops.quoteAudit };
+  return { ...broker, marketPipeline: ops.marketPipeline, multiPaper: ops.multiPaper, connections: ops.connections, quoteAudit:ops.quoteAudit, stockQuoteAudit:ops.stockQuoteAudit };
 }

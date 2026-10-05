@@ -65,6 +65,12 @@ bid references on the same input. Conditional published fees are distinguished
 from verified account fees. The current small crypto confluence subset was
 negative under that scenario; it did not authorize stock or crypto policy
 activation. The monitor shows this research limitation separately from fills.
+The separate [prospective stock/ETF protocol](docs/STOCK-QUOTE-PROTOCOL.md)
+fixes October 5–6 regular sessions before their results, fingerprints the actual
+OCaml analyzer and audits original IEX/REST references across 345 planned slots.
+It automatically retains dated reports without network access or order authority.
+Localhost distinguishes its waiting/collection state from actual paper orders;
+two sessions cannot demonstrate a profitable strategy.
 Scanner performance work preserves exact full-analysis parity; measurements
 and their limits are recorded in [the pipeline guide](docs/MARKET-PIPELINE.md).
 The [frozen Markov shadow score](docs/MARKOV-SHADOW-SCORE.md) validates actual

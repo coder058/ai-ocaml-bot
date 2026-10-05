@@ -65,6 +65,27 @@ test("dated research summary cannot publish private labels, returns, future data
   assert.equal(executionView(fixture(),now).quoteAudit,null);
 });
 
+test("prospective stock protocol displays actual planned scope and rejects authority, future dates and contradictory coverage", () => {
+  // SOURCE: synthetic empty-before-open protocol; these are not market results.
+  const at="2026-10-05T06:05:00Z", laterNow=Date.parse("2026-10-05T06:30:00Z");
+  const source={labelCount:0,foldCounts:{discovery:0,validation:0},longCandidateReferences:0,frozenFeatureCount:0};
+  const stock={schema:"prospective_stock_quote_summary_v1",generatedAt:at,protocolFrozenAt:"2026-10-05T06:00:00Z",
+    sessionState:"awaiting_first_session",instruments:69,frameSlots:345,streamInstruments:30,
+    sessions:[{fold:"discovery",openAt:"2026-10-05T13:30:00Z",closeAt:"2026-10-05T20:00:00Z",secret:"PRIVATE"},
+      {fold:"validation",openAt:"2026-10-06T13:30:00Z",closeAt:"2026-10-06T20:00:00Z"}],
+    stream:source,rest:source,orderAuthority:false,winProbability:null,brokerPnl:null,labels:[{private:"PRIVATE"}]};
+  const t={...fixture(),stockQuoteAudit:stock};
+  const view=executionView(t,laterNow);
+  assert.equal(view.stockQuoteAudit.frameSlots,345);assert.equal(view.stockQuoteAudit.stream.labelCount,0);
+  assert.equal(view.stockQuoteAudit.sessionState,"awaiting_first_session");assert.equal(JSON.stringify(view).includes("PRIVATE"),false);
+  for (const change of [{orderAuthority:true},{winProbability:.9},{brokerPnl:10},{generatedAt:"2099-01-01T00:00:00Z"},
+    {protocolFrozenAt:"2026-10-05T14:00:00Z"},{sessionState:"complete"},{frameSlots:455},{streamInstruments:70},
+    {sessions:stock.sessions.slice(0,1)},{stream:{...source,labelCount:1}},{rest:{...source,frozenFeatureCount:true}}]) {
+    assert.equal(executionView({...t,stockQuoteAudit:{...stock,...change}},laterNow).stockQuoteAudit,null);
+  }
+  assert.equal(executionView(fixture(),laterNow).stockQuoteAudit,null);
+});
+
 test("stale or future runtime/analysis never reports current gate readiness or a current candidate", () => {
   for (const invalid of ["2026-10-04T18:00:00Z", "2026-10-05T00:00:00Z", "not a time"]) {
     const t = fixture();

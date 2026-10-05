@@ -24,11 +24,43 @@ from export_telemetry import (  # noqa: E402
     stock_order_evidence,
     operational_snapshot,
     quote_audit_summary,
+    stock_quote_audit_summary,
     service_state,
 )
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_pinned_stock_audit_coverage_does_not_publish_quotes_returns_private_fields_or_authority(self):
+        import hashlib
+        # SOURCE: synthetic prospective manifest/report, not broker observations.
+        manifest={"createdAt":"2026-10-05T05:00:00Z","symbols":["QQQ"],"frames":["1m"],"streamSymbols":["QQQ"],
+            "policy":"trend_candle_confluence_v1","sessions":[
+                {"date":"2026-10-05","open":"09:30","close":"16:00","fold":"discovery"},
+                {"date":"2026-10-06","open":"09:30","close":"16:00","fold":"validation"}]}
+        audit={"schema":"prospective_stock_quote_reference_v1","generatedAt":"2026-10-05T05:01:00Z",
+            "sessionState":"awaiting_first_session","orderAuthority":False,"winProbability":None,"brokerPnl":None,
+            "equityNetCosts":None,"executionModel":None,"labelCount":0,"foldCounts":{},
+            "coverage":[{"symbol":"QQQ","frame":"1m"}],"labels":[{"accountId":"PRIVATE"}],
+            "summary":{"netPnl":"PRIVATE"},"frozenPolicySubset":{"policy":manifest['policy'],"side":"long",
+                "orderAuthority":False,"winProbability":None,"referenceCount":0}}
+        with tempfile.TemporaryDirectory() as directory:
+            mp,rp=Path(directory)/"manifest.json",Path(directory)/"report.json"
+            mp.write_text(json.dumps(manifest));digest=hashlib.sha256(mp.read_bytes()).hexdigest()
+            raw={"manifestSha256":digest,"generatedAt":audit['generatedAt'],"orderAuthority":False,
+                "winProbability":None,"brokerPnl":None,"streamExitAudit":audit,"restExitAudit":audit,"secret":"PRIVATE"}
+            rp.write_text(json.dumps(raw));safe=stock_quote_audit_summary(mp,rp,digest)
+            self.assertEqual(safe['frameSlots'],1);self.assertEqual(safe['stream']['labelCount'],0)
+            self.assertEqual(safe['sessions'][0]['openAt'],'2026-10-05T13:30:00Z')
+            self.assertNotIn('PRIVATE',json.dumps(safe));self.assertNotIn('labels',safe)
+            for changes in ({"orderAuthority":True},{"winProbability":.9},{"brokerPnl":1},
+                {"manifestSha256":"changed"},{"generatedAt":"2099-01-01T00:00:00Z"},
+                {"streamExitAudit":{**audit,"labelCount":True}},
+                {"streamExitAudit":{**audit,"coverage":[]}},
+                {"streamExitAudit":{**audit,"sessionState":"complete"}},
+                {"streamExitAudit":{**audit,"equityNetCosts":0}}):
+                rp.write_text(json.dumps({**raw,**changes}));self.assertIsNone(stock_quote_audit_summary(mp,rp,digest))
+            mp.write_text(json.dumps(manifest)+"\n");self.assertIsNone(stock_quote_audit_summary(mp,rp,digest))
+
     def test_quote_audit_summary_is_dated_aggregate_only_without_return_or_private_fields(self):
         # SOURCE: synthetic aggregate fields exercise publication boundaries only.
         raw={"schema":"first_observed_long_quote_reference_v1","generatedAt":"2026-10-04T22:00:00Z",

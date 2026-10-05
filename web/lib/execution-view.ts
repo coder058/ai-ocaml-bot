@@ -200,6 +200,23 @@ export function executionView(t: PaperTelemetry | null, now = Date.now()) {
        comparisonCount:audit.comparisonCount,horizonBars:audit.horizonBars,maxExitLagSeconds:audit.maxExitLagSeconds,splitAt:audit.splitAt,
        missingEntryQuotes:count(audit.rejected?.noFirstObservedFreshEntryQuote)?audit.rejected.noFirstObservedFreshEntryQuote:null,
        missingExitQuotes:count(audit.rejected?.noTimelyFreshExitReference)?audit.rejected.noTimelyFreshExitReference:null} : null;
+  const stock=t.stockQuoteAudit;
+  const dated=(at: unknown): at is string => typeof at==="string" && Number.isFinite(Date.parse(at));
+  const stockSource=(source: NonNullable<PaperTelemetry["stockQuoteAudit"]>["stream"] | undefined) => source && count(source.labelCount) &&
+    count(source.foldCounts?.discovery) && count(source.foldCounts?.validation) && source.labelCount===source.foldCounts.discovery+source.foldCounts.validation &&
+    count(source.longCandidateReferences) && source.longCandidateReferences<=source.labelCount && count(source.frozenFeatureCount) && source.labelCount<=source.frozenFeatureCount;
+  const stockQuoteAudit=stock && stock.schema==="prospective_stock_quote_summary_v1" && stock.orderAuthority===false && stock.winProbability===null && stock.brokerPnl===null &&
+    dated(stock.generatedAt) && Date.parse(stock.generatedAt)<=now && dated(stock.protocolFrozenAt) && Date.parse(stock.protocolFrozenAt)<=Date.parse(stock.generatedAt) &&
+    count(stock.instruments) && stock.instruments>0 && count(stock.frameSlots) && stock.frameSlots===stock.instruments*TRACE_FRAMES.length &&
+    count(stock.streamInstruments) && stock.streamInstruments<=stock.instruments && Array.isArray(stock.sessions) && stock.sessions.length===2 &&
+    stock.sessions.every((s,i)=>s?.fold===(i===0?"discovery":"validation") && dated(s.openAt) && dated(s.closeAt) && Date.parse(s.openAt)<Date.parse(s.closeAt)) &&
+    Date.parse(stock.protocolFrozenAt)<Date.parse(stock.sessions[0].openAt) && Date.parse(stock.sessions[0].closeAt)<Date.parse(stock.sessions[1].openAt) &&
+    stock.sessionState===(Date.parse(stock.generatedAt)<Date.parse(stock.sessions[0].openAt)?"awaiting_first_session":Date.parse(stock.generatedAt)>=Date.parse(stock.sessions[1].closeAt)?"complete":"collecting") &&
+    stockSource(stock.stream) && stockSource(stock.rest)
+    ? {generatedAt:stock.generatedAt,protocolFrozenAt:stock.protocolFrozenAt,sessionState:stock.sessionState,instruments:stock.instruments,frameSlots:stock.frameSlots,streamInstruments:stock.streamInstruments,
+       sessions:stock.sessions.map(s=>({fold:s.fold,openAt:s.openAt,closeAt:s.closeAt})),
+       stream:{labelCount:stock.stream.labelCount,discovery:stock.stream.foldCounts.discovery,validation:stock.stream.foldCounts.validation,longCandidateReferences:stock.stream.longCandidateReferences,frozenFeatureCount:stock.stream.frozenFeatureCount},
+       rest:{labelCount:stock.rest.labelCount,discovery:stock.rest.foldCounts.discovery,validation:stock.rest.foldCounts.validation,longCandidateReferences:stock.rest.longCandidateReferences,frozenFeatureCount:stock.rest.frozenFeatureCount}} : null;
   return { generatedAt: t.generatedAt, analysisAsOf: t.marketPipeline?.asOf ?? null, retrievedAt: t.marketPipeline?.retrievedAt ?? null,
     traceStart: TRACE_START, orderAuthority: false as const, winProbability: null,
     cohortAccounting:cohortAccounting(t,now),
@@ -207,6 +224,7 @@ export function executionView(t: PaperTelemetry | null, now = Date.now()) {
     candidates: rows.filter(r => r.candidate).length, dataCounts: counts("dataState"), routeCounts: counts("route"),
     fx: t.connections?.fx ? { connected: t.connections.fx.connected, reason: t.connections.fx.reason, executionAdapterAvailable: t.connections.fx.executionAdapterAvailable } : null,
     quoteAudit,
+    stockQuoteAudit,
     rows, orders: newOrders(t, now), ordersComplete: t.ordersComplete, fillsComplete: t.fillsComplete === true,
     explanation: "Five timeframes describe the same instrument. Current multiframe execution permits one owned ticket per instrument; the number of open positions is not a count of analyses or completed trades." };
 }

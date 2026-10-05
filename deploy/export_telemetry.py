@@ -19,6 +19,7 @@ import urllib.request
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from cryptography.hazmat.primitives import serialization
 
@@ -752,6 +753,65 @@ def quote_audit_summary() -> dict | None:
     except (OSError,ValueError,KeyError,TypeError,OverflowError):return None
 
 
+def stock_quote_audit_summary(manifest_path: Path | None = None, report_path: Path | None = None,
+                             expected_sha256: str = "6dc7d3b44459f6bf1a236f6237c9ca22272631acfccfe650c1dc718d39a40b75") -> dict | None:
+    """Safe dated coverage only; no raw quote labels or return/fee estimates."""
+    # SOURCE: actual pinned prospective manifest; this is not a policy authority.
+    manifest_path = manifest_path or Path(__file__).resolve().parents[1]/"research/cohorts/stock-20261005-06.json"
+    report_path = report_path or STATE_DIR/"stock-quote-audit/report.json"
+    try:
+        encoded = manifest_path.read_bytes()
+        if hashlib.sha256(encoded).hexdigest() != expected_sha256: return None
+        manifest, raw = json.loads(encoded), json.loads(report_path.read_text())
+        if (raw.get("manifestSha256") != expected_sha256 or raw.get("orderAuthority") is not False
+                or raw.get("winProbability") is not None or raw.get("brokerPnl") is not None): return None
+        generated = datetime.fromisoformat(raw["generatedAt"].replace("Z", "+00:00"))
+        created = datetime.fromisoformat(manifest["createdAt"].replace("Z", "+00:00"))
+        if generated.tzinfo is None or created.tzinfo is None or not created <= generated <= datetime.now(timezone.utc): return None
+        sessions = []
+        for row in manifest["sessions"]:
+            session = {"fold": row["fold"]}
+            for key in ("open", "close"):
+                local = datetime.strptime(row["date"]+" "+row[key], "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("America/New_York"))
+                session[key+"At"] = local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            sessions.append(session)
+        if len(sessions) != 2 or [s["fold"] for s in sessions] != ["discovery", "validation"]: return None
+        opening = datetime.fromisoformat(sessions[0]["openAt"].replace("Z", "+00:00"))
+        closing = datetime.fromisoformat(sessions[-1]["closeAt"].replace("Z", "+00:00"))
+        state = "awaiting_first_session" if generated < opening else "complete" if generated >= closing else "collecting"
+        allowed_slots = {(symbol,frame) for symbol in manifest["symbols"] for frame in manifest["frames"]}
+        def count(value):
+            if not isinstance(value,int) or isinstance(value,bool) or value < 0: raise ValueError("invalid count")
+            return value
+        def source(name):
+            audit = raw[name]
+            if (audit.get("schema") != "prospective_stock_quote_reference_v1" or audit.get("generatedAt") != raw["generatedAt"]
+                    or audit.get("sessionState") != state or audit.get("orderAuthority") is not False
+                    or audit.get("winProbability") is not None or audit.get("brokerPnl") is not None
+                    or audit.get("equityNetCosts") is not None or audit.get("executionModel") is not None):
+                raise ValueError("invalid descriptive stock audit")
+            labels = count(audit["labelCount"])
+            folds = {fold: count(audit.get("foldCounts",{}).get(fold,0)) for fold in ("discovery", "validation")}
+            coverage = audit["coverage"]
+            if sum(folds.values()) != labels or len(coverage) != len(allowed_slots) or {(r["symbol"],r["frame"]) for r in coverage} != allowed_slots:
+                raise ValueError("incomplete or ambiguous coverage")
+            if sum(count(row.get("quoteReferences",0)) for row in coverage) != labels:
+                raise ValueError("coverage disagrees with labels")
+            policy = audit["frozenPolicySubset"]
+            if policy.get("policy") != manifest["policy"] or policy.get("side") != "long" or policy.get("orderAuthority") is not False or policy.get("winProbability") is not None:
+                raise ValueError("invalid frozen candidate subset")
+            candidates = count(policy["referenceCount"])
+            if candidates > labels: raise ValueError("candidate count exceeds references")
+            return {"labelCount": labels, "foldCounts": folds, "longCandidateReferences": candidates,
+                    "frozenFeatureCount": sum(count(r.get("frozenProducerCandles",0)) for r in coverage)}
+        return {"schema":"prospective_stock_quote_summary_v1", "generatedAt":raw["generatedAt"],
+                "protocolFrozenAt":manifest["createdAt"], "sessionState":state,
+                "instruments":len(manifest["symbols"]), "frameSlots":len(allowed_slots), "streamInstruments":len(manifest["streamSymbols"]),
+                "sessions":sessions, "stream":source("streamExitAudit"), "rest":source("restExitAudit"),
+                "orderAuthority":False, "winProbability":None, "brokerPnl":None}
+    except (OSError,ValueError,KeyError,TypeError,OverflowError,AttributeError): return None
+
+
 def operational_snapshot() -> dict:
     """Current file-backed analysis/OMS health; no credential or broker request.
 
@@ -760,7 +820,7 @@ def operational_snapshot() -> dict:
     """
     document={"version":1,"source":"Dublin OCaml paper service",
         "generatedAt":datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
-        "connections":connection_state(),"quoteAudit":quote_audit_summary()}
+        "connections":connection_state(),"quoteAudit":quote_audit_summary(),"stockQuoteAudit":stock_quote_audit_summary()}
     for name,filename in (("marketPipeline","market-pipeline.json"),("multiPaper","multi-paper.json")):
         try:
             document[name]=json.loads((STATE_DIR/filename).read_text())
@@ -801,6 +861,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "decisionHistory": {**decision_history(decision_events, orders), **multi_order_evidence(orders),**stock_order_evidence(orders)},
         "connections":connection_state(),
         "quoteAudit":quote_audit_summary(),
+        "stockQuoteAudit":stock_quote_audit_summary(),
         "journal": public_journal(events, orders),
         "journalComplete": journal_complete,
     }
