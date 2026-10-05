@@ -124,7 +124,7 @@ let run ()=
       "frame",(match Option.bind origin (field "analysisEvidence") with Some evidence->
         Option.value ~default:`Null (field "frame" evidence)|None->`Null)])
   ) (List.sort_uniq String.compare (List.map (fun row->text "symbol" row) !rows)) in
-  let result=`Assoc ["asOf",`String (Multi_paper.stamp (Unix.gettimeofday ()));
+  let result=`Assoc ["asOf",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
     "mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
     "automaticStrategy",`Bool true;"newEntriesEnabled",`Bool new_entries;
     "sessionOpen",`Bool session;"entryUsd",`Float Multi_paper.entry_usd;

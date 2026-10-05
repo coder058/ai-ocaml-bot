@@ -76,6 +76,24 @@ and corrupted ledgers. The ten existing router runtime tests also pass. Syntheti
 curl requires both ledger and DECISION event before POST and the exact paper URL.
 These are engineering checks, not backtests.
 
+### Measured event timestamps — 5 October 02:44 UTC
+
+New stock-router decision/acknowledgement events, durable `sentAt` fields and
+stock/multiframe operational receipts preserve the measured microseconds from
+`gettimeofday`. Native candle starts keep their original whole-second format.
+Earlier journals are not rewritten; their one-second uncertainty remains.
+Microsecond representation is not a claim of clock accuracy, synchronization
+or HFT latency.
+
+The full OCaml build/unit checks and 26 real-binary synthetic lifecycle tests
+(ten stock router, eight scheduler, eight multiframe) passed on Dublin. At the
+synthetic HTTP boundary, tests inspect the actual durable files and require
+intent time <= decision time <= receipt of POST. These checks do not imply an
+actual open-session stock fill. Production `stock-auto.json` at
+02:44:05.661216Z was OBSERVE, session closed, zero router invocations and no
+owned stock positions; `stock-connection.json` and `multi-paper.json` also
+retained their new fractional operational clocks.
+
 Before activation: collect open-session first-observed candidates and executable
 quotes, evaluate chronological costs/controls, inspect the frozen policy's
 evidence and verify the actual enabled lifecycle at paper. Current gross candle

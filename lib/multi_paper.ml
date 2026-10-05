@@ -39,6 +39,15 @@ let stamp now =
   (* SOURCE: Unix.tm_year is years since 1900 and tm_mon is zero based. *)
   let t = Unix.gmtime now in Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ"
     (t.tm_year + 1900) (t.tm_mon + 1) t.tm_mday t.tm_hour t.tm_min t.tm_sec
+let observed_stamp now =
+  (* SOURCE: gettimeofday measurements retain microseconds; floor rather
+     than round prevents an event from moving into the next candle boundary.
+     This is wall-clock resolution, not measured clock accuracy or latency. *)
+  let seconds = floor now in
+  let t = Unix.gmtime seconds in
+  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d.%06dZ"
+    (t.tm_year + 1900) (t.tm_mon + 1) t.tm_mday t.tm_hour t.tm_min t.tm_sec
+    (int_of_float ((now -. seconds) *. 1_000_000.))
 let key (signal : signal) = signal.symbol ^ "|" ^ signal.frame
 let client_id parts = "jsbotmtf" ^ Digest.to_hex (Digest.string (String.concat "|" parts))
 (* SOURCE: MD5 here only gives a deterministic compact order identifier; it
@@ -99,7 +108,7 @@ let entry ?quantity_text state (signal : signal) ~now ~qty ~price =
   let id = client_id [signal.symbol; signal.frame; signal.bar; "entry";
                       "trend_candle_confluence_v1"] in
   let pending = {client_id=id; side="buy"; requested_qty=qty; quantity_text; limit_price=price;
-    sent_at=stamp now; reason="Rising EMA20/EMA50 trend and bullish candle shape on a closed bar";
+    sent_at=observed_stamp now; reason="Rising EMA20/EMA50 trend and bullish candle shape on a closed bar";
     reading=signal.reading} in
   let ticket = {symbol=signal.symbol; frame=signal.frame; bar=signal.bar; entry_id=id;
     stop=signal.stop; owned_max=0.; entry_price=None; entry_filled=0.; exit_filled=0.;
@@ -130,7 +139,7 @@ let exit_reason ~now (ticket : ticket) quote document =
 
 let exit ?quantity_text ?(reading=`Assoc []) state (ticket : ticket) ~now ~qty ~price ~quote_time ~reason =
   let pending = {client_id=client_id [ticket.entry_id; "exit"; quote_time]; side="sell";
-    requested_qty=qty; quantity_text; limit_price=price; sent_at=stamp now; reason;
+    requested_qty=qty; quantity_text; limit_price=price; sent_at=observed_stamp now; reason;
     reading=`Assoc (["invalidationLevel",`Float ticket.stop; "originFrame",`String ticket.frame] @
       (match reading with `Assoc fields -> List.remove_assoc "invalidationLevel" fields | _ -> []))} in
   let ticket = {ticket with pending=Some pending; last_exit_quote=Some quote_time} in

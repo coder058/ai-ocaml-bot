@@ -14,18 +14,27 @@ FAKE = r'''#!/usr/bin/env python3
 import sys,os,json
 from pathlib import Path
 from decimal import Decimal
+from datetime import datetime,timezone
+import re
 r=Path(os.environ['SYNTHETIC_STOCK_DIR']); d=json.loads((r/'broker.json').read_text())
 sys.stdin.read()
 a=sys.argv[1:]; url=a[-1]; method=a[a.index('-X')+1]
 def finish(body,code=200):
  print(json.dumps(body));print('__HTTP_STATUS__:'+str(code));sys.exit(0)
 if method=='POST':
+ received_at=datetime.now(timezone.utc)
  assert url=='https://paper-api.alpaca.markets/v2/orders'
  b=json.loads(a[a.index('--data-binary')+1]); assert b['type']=='market' and b['time_in_force']=='day'
  rows=json.loads((r/'stock-paper-ledger.json').read_text())['orders']
- assert any(x['clientOrderId']==b['client_order_id'] and x['state']=='pending' for x in rows)
+ pending=next(x for x in rows if x['clientOrderId']==b['client_order_id'] and x['state']=='pending')
  events=[json.loads(x) for x in (r/'stock-paper-events.jsonl').read_text().splitlines()]
- assert any(x['clientOrderId']==b['client_order_id'] and x['kind']=='DECISION' for x in events)
+ decision=next(x for x in events if x['clientOrderId']==b['client_order_id'] and x['kind']=='DECISION')
+ # SOURCE: inspect the actual files written by the OCaml runtime at the
+ # synthetic HTTP boundary, not a replay or a formatter-only assertion.
+ for stamp in [pending['sentAt'],decision['at']]:
+  assert re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z',stamp)
+ parse=lambda value:datetime.fromisoformat(value.replace('Z','+00:00'))
+ assert parse(pending['sentAt'])<=parse(decision['at'])<=received_at
  with (r/'posts.jsonl').open('a') as f:f.write(json.dumps(b)+'\n')
  if d.get('reject'):finish({'message':'synthetic rejected'},422)
  if d.get('unknown_before'):sys.exit(7)

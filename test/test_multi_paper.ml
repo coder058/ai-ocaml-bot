@@ -23,6 +23,13 @@ let order pending status qty price = `Assoc [
 let change name value = function `Assoc fields -> `Assoc ((name,value)::List.remove_assoc name fields)
   | value -> value
 let () =
+  check "measured event precision preserves canonical candle boundaries"
+    (Multi_paper.stamp 0. = "1970-01-01T00:00:00Z" &&
+     Multi_paper.observed_stamp 0. = "1970-01-01T00:00:00.000000Z" &&
+     Multi_paper.observed_stamp 0.125 = "1970-01-01T00:00:00.125000Z" &&
+     Multi_paper.observed_stamp 59.99999975 = "1970-01-01T00:00:59.999999Z" &&
+     Multi_paper.observed_stamp 60. = "1970-01-01T00:01:00.000000Z" &&
+     Multi_paper.observed_stamp (-0.125) = "1969-12-31T23:59:59.875000Z");
   check "canonical crypto rejects equities/URL injection"
     (Paper_crypto_broker.canonical "ETHUSD"=Ok "ETH/USD" &&
      Result.is_error (Paper_crypto_broker.canonical "AAPL") &&

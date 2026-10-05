@@ -15,7 +15,7 @@ let atomic file document =
   let directory=Unix.openfile (Filename.dirname file) [Unix.O_RDONLY] 0 in
   Fun.protect ~finally:(fun ()->Unix.close directory) (fun ()->Unix.fsync directory)
 let journal kind ticker cid reason detail =
-  let row=`Assoc ["at",`String (Multi_paper.stamp (Unix.gettimeofday ()));
+  let row=`Assoc ["at",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
     "kind",`String kind;"symbol",`String ticker;"clientOrderId",`String cid;
     "reason",`String reason;"detail",detail] in
   let fd=Unix.openfile (path "stock-paper-events.jsonl") [Unix.O_CREAT;Unix.O_WRONLY;Unix.O_APPEND] 0o640 in
@@ -181,7 +181,7 @@ let run () =
         if Sys.getenv_opt "PAPER_ORDERS"<>Some "1" || Sys.getenv_opt "STOCK_PAPER_ORDERS"<>Some "1" then failwith "stock paper gates are not armed";
         let reason=Option.value ~default:"explicit paper execution request; no automatic strategy" (argument "--reason") in
         let row=`Assoc (["symbol",`String ticker;"side",`String side;"clientOrderId",`String cid;
-          "state",`String "pending";"sentAt",`String (Multi_paper.stamp (Unix.gettimeofday ()));
+          "state",`String "pending";"sentAt",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
           "reason",`String reason;"request",Yojson.Safe.from_string body] @
           if evidence=`Null then [] else ["analysisEvidence",evidence]) in
         orders:= !orders @ [row];save !orders;
@@ -203,7 +203,7 @@ let run () =
     | None->["DIA";"QQQ";"SPY";"XLE";"XOP";"TSLA";"NVDA";"MSFT";"AMZN";"GOOGL";"META";"AMD"] in
   (* SOURCE: initial stock/ETF universe from the user's requested markets. *)
   let quotes=match Paper_stock_broker.quotes symbols with Ok result->result | Error error->`Assoc ["error",`String error] in
-  let result=`Assoc ["asOf",`String (Multi_paper.stamp (Unix.gettimeofday ()));
+  let result=`Assoc ["asOf",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
     "provider",`String "Alpaca paper";"product",`String "US stocks / ETF";
     "connected",`Bool true;"sessionOpen",`Bool session;"nextOpen",Option.value ~default:`Null (field "next_open" clock);
     "accountReady",`Bool account_ready;

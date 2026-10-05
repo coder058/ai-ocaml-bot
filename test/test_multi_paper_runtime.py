@@ -15,6 +15,7 @@ ENGINE = Path(__file__).resolve().parents[1] / "_build/default/bin/multi_paper_m
 
 FAKE_CURL = r'''#!/usr/bin/env python3
 import sys,os,json
+import re
 from pathlib import Path
 from datetime import datetime,timezone
 from decimal import Decimal
@@ -25,11 +26,19 @@ args=sys.argv[1:]; url=args[-1]; method=args[args.index('-X')+1]
 def finish(body,code=200):
     print(json.dumps(body));print('__HTTP_STATUS__:'+str(code));sys.exit(0)
 if method=='POST':
+    received_at=datetime.now(timezone.utc)
     assert url=='https://paper-api.alpaca.markets/v2/orders'
     body=json.loads(args[args.index('--data-binary')+1])
     ledger=json.loads((root/'multi-paper-ledger.json').read_text())
     pending=next(t['pending'] for t in ledger['tickets'] if t['symbol']==body['symbol'])
     assert pending['clientOrderId']==body['client_order_id']  # durable BEFORE POST
+    events=[json.loads(line) for line in (root/'multi-paper-events.jsonl').read_text().splitlines()]
+    decision=next(row for row in events if row.get('clientOrderId')==body['client_order_id'] and row['kind']=='DECISION')
+    # SOURCE: measured runtime events must exist durably before synthetic HTTP.
+    for stamp in [pending['sentAt'],decision['at']]:
+        assert re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z',stamp)
+    parse=lambda value:datetime.fromisoformat(value.replace('Z','+00:00'))
+    assert parse(pending['sentAt'])<=parse(decision['at'])<=received_at
     assert body['symbol']==data.get('symbol','ETH/USD') and body['time_in_force']=='ioc'
     with (root/'posts.jsonl').open('a') as stream: stream.write(json.dumps(body)+'\n')
     if data.get('reject'):

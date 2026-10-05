@@ -20,7 +20,7 @@ let atomic file document =
   Fun.protect ~finally:(fun () -> Unix.close directory) (fun () -> Unix.fsync directory)
 
 let event kind (ticket : Multi_paper.ticket) extra =
-  let document = `Assoc (["at",`String (Multi_paper.stamp (Unix.gettimeofday ()));
+  let document = `Assoc (["at",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
     "kind",`String kind; "symbol",`String ticket.symbol; "frame",`String ticket.frame;
     "signalBar",`String ticket.bar; "policy",`String "trend_candle_confluence_v1"] @ extra) in
   let fd = Unix.openfile event_path [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_APPEND] 0o640 in
@@ -180,7 +180,7 @@ let run ~execute () =
                  "executionPurpose",`String "authorized universe wind-down"] in
                let next,updated=Multi_paper.exit ~quantity_text ~reading !state ticket
                  ~now:(Unix.gettimeofday ()) ~qty ~price:reference
-                 ~quote_time:(Multi_paper.stamp (Unix.gettimeofday ())) ~reason in
+                 ~quote_time:(Multi_paper.observed_stamp (Unix.gettimeofday ())) ~reason in
                state:=next;persist next;transmit updated asset
              | Ok _ -> failure ticket.symbol "Excluded owned dust is below minimum order quantity"))
          | _ -> failure ticket.symbol "Wind-down blocked: inventory unavailable or exceeds owned fills")
@@ -241,7 +241,7 @@ let run ~execute () =
             ~now:(Unix.gettimeofday ()) ~qty ~price in
           state := next; persist next; transmit ticket asset))
       | None -> ()) entry_signals;
-  let result = `Assoc ["asOf",`String (Multi_paper.stamp (Unix.gettimeofday ()));
+  let result = `Assoc ["asOf",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
     "mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
     "newEntriesEnabled",`Bool entries_enabled;
     "policy",`String "trend_candle_confluence_v1"; "calibrated",`Bool false;
