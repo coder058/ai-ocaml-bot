@@ -127,11 +127,22 @@ export function executionView(t: PaperTelemetry | null, now = Date.now()) {
   if (!t) return null;
   const rows = (t.marketPipeline?.markets ?? []).filter(m => m.symbol !== "AAPL").flatMap(m => TRACE_FRAMES.map(frame => rowFor(t, m, frame, now)));
   const counts = (key: "dataState" | "route") => Object.fromEntries([...new Set(rows.map(r => r[key]))].map(value => [value, rows.filter(r => r[key] === value).length]));
+  const audit=t.quoteAudit;
+  const count=(value: unknown): value is number => typeof value==="number" && Number.isSafeInteger(value) && value>=0;
+  const quoteAudit=audit && audit.schema==="first_observed_long_quote_reference_v1" && audit.orderAuthority===false && audit.winProbability===null &&
+    Number.isFinite(Date.parse(audit.generatedAt)) && Date.parse(audit.generatedAt)<=now && count(audit.labelCount) &&
+    count(audit.foldCounts?.discovery) && count(audit.foldCounts?.validation) && audit.labelCount===audit.foldCounts.discovery+audit.foldCounts.validation &&
+    count(audit.comparisonCount) && count(audit.horizonBars) && audit.horizonBars>0 && count(audit.maxExitLagSeconds) && Number.isFinite(Date.parse(audit.splitAt))
+    ? {generatedAt:audit.generatedAt,labelCount:audit.labelCount,discovery:audit.foldCounts.discovery,validation:audit.foldCounts.validation,
+       comparisonCount:audit.comparisonCount,horizonBars:audit.horizonBars,maxExitLagSeconds:audit.maxExitLagSeconds,splitAt:audit.splitAt,
+       missingEntryQuotes:count(audit.rejected?.noFirstObservedFreshEntryQuote)?audit.rejected.noFirstObservedFreshEntryQuote:null,
+       missingExitQuotes:count(audit.rejected?.noTimelyFreshExitReference)?audit.rejected.noTimelyFreshExitReference:null} : null;
   return { generatedAt: t.generatedAt, analysisAsOf: t.marketPipeline?.asOf ?? null, retrievedAt: t.marketPipeline?.retrievedAt ?? null,
     traceStart: TRACE_START, orderAuthority: false as const, winProbability: null,
     symbols: new Set(rows.map(r => `${r.venue}|${r.symbol}`)).size, frames: rows.length,
     candidates: rows.filter(r => r.candidate).length, dataCounts: counts("dataState"), routeCounts: counts("route"),
     fx: t.connections?.fx ? { connected: t.connections.fx.connected, reason: t.connections.fx.reason, executionAdapterAvailable: t.connections.fx.executionAdapterAvailable } : null,
+    quoteAudit,
     rows, orders: newOrders(t, now), ordersComplete: t.ordersComplete, fillsComplete: t.fillsComplete === true,
     explanation: "Five timeframes describe the same instrument. Current multiframe execution permits one owned ticket per instrument; the number of open positions is not a count of analyses or completed trades." };
 }

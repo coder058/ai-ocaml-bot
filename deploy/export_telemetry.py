@@ -646,6 +646,31 @@ def market_research_state(path: Path = SHADOW_PATH) -> dict | None:
             "orderAuthority": False, "winProbability": None}
 
 
+def quote_audit_summary() -> dict | None:
+    """Only dated aggregate research fields, never labels, orders or policy authority."""
+    try:
+        raw=json.loads((STATE_DIR/"forward-quote-audit.json").read_text())
+        if raw.get("schema")!="first_observed_long_quote_reference_v1" or raw.get("orderAuthority") is not False or raw.get("winProbability") is not None or raw.get("brokerPnl") is not None:
+            return None
+        def count(value):
+            if not isinstance(value,int) or isinstance(value,bool) or value<0:raise ValueError("invalid count")
+            return value
+        generated=datetime.fromisoformat(raw["generatedAt"].replace("Z","+00:00"))
+        if generated.tzinfo is None or generated>datetime.now(timezone.utc):return None
+        folds={key:count(raw.get("foldCounts",{}).get(key,0)) for key in ("discovery","validation")}
+        labels=count(raw["labelCount"])
+        if sum(folds.values())!=labels:return None
+        result={"schema":raw["schema"],"generatedAt":raw["generatedAt"],"orderAuthority":False,"winProbability":None,
+            "labelCount":labels,"foldCounts":folds,"comparisonCount":count(raw["comparisonCount"]),
+            "horizonBars":count(raw["horizonBars"]),"maxExitLagSeconds":count(raw["maxExitLagSeconds"]),"splitAt":raw["splitAt"],
+            "rejected":{key:count(raw.get("rejected",{}).get(key,0)) for key in
+                ("signalNotReady","noFirstObservedPatternValues","noFirstObservedFreshEntryQuote","noTimelyFreshExitReference","crossesChronologicalSplit")}}
+        # Do not publish returns as trading performance. Exact research statistics
+        # and scenario assumptions remain in the separate reproducible report.
+        return result
+    except (OSError,ValueError,KeyError,TypeError,OverflowError):return None
+
+
 def operational_snapshot() -> dict:
     """Current file-backed analysis/OMS health; no credential or broker request.
 
@@ -654,7 +679,7 @@ def operational_snapshot() -> dict:
     """
     document={"version":1,"source":"Dublin OCaml paper service",
         "generatedAt":datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
-        "connections":connection_state()}
+        "connections":connection_state(),"quoteAudit":quote_audit_summary()}
     for name,filename in (("marketPipeline","market-pipeline.json"),("multiPaper","multi-paper.json")):
         try:
             document[name]=json.loads((STATE_DIR/filename).read_text())
@@ -694,6 +719,7 @@ def snapshot(credentials: dict[str, str], service: dict[str, object],
         "cryptoFees": crypto_fees,
         "decisionHistory": {**decision_history(decision_events, orders), **multi_order_evidence(orders),**stock_order_evidence(orders)},
         "connections":connection_state(),
+        "quoteAudit":quote_audit_summary(),
         "journal": public_journal(events, orders),
         "journalComplete": journal_complete,
     }

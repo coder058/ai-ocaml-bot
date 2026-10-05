@@ -23,11 +23,32 @@ from export_telemetry import (  # noqa: E402
     multi_order_evidence,
     stock_order_evidence,
     operational_snapshot,
+    quote_audit_summary,
     service_state,
 )
 
 
 class DecisionHistoryTests(unittest.TestCase):
+    def test_quote_audit_summary_is_dated_aggregate_only_without_return_or_private_fields(self):
+        # SOURCE: synthetic aggregate fields exercise publication boundaries only.
+        raw={"schema":"first_observed_long_quote_reference_v1","generatedAt":"2026-10-04T22:00:00Z",
+            "orderAuthority":False,"winProbability":None,"brokerPnl":None,"labelCount":2,
+            "foldCounts":{"validation":2},"comparisonCount":1,"horizonBars":1,"maxExitLagSeconds":120,
+            "splitAt":"2026-10-04T21:00:00Z","rejected":{"noFirstObservedFreshEntryQuote":10},
+            "labels":[{"accountId":"PRIVATE"}],"summary":{"inventedPnl":"PRIVATE"},"apiSecret":"PRIVATE"}
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/"forward-quote-audit.json"
+            with patch("export_telemetry.STATE_DIR",Path(directory)):
+                path.write_text(json.dumps(raw));safe=quote_audit_summary()
+                self.assertEqual(safe["labelCount"],2)
+                self.assertEqual(safe["foldCounts"],{"discovery":0,"validation":2})
+                self.assertEqual(safe["generatedAt"],raw["generatedAt"])
+                self.assertNotIn("PRIVATE",json.dumps(safe));self.assertNotIn("summary",safe)
+                for change in [{"orderAuthority":True},{"winProbability":.9},{"brokerPnl":10},{"labelCount":True},
+                               {"foldCounts":{"validation":1}},{"generatedAt":"2099-01-01T00:00:00Z"}]:
+                    path.write_text(json.dumps({**raw,**change}));self.assertIsNone(quote_audit_summary())
+                path.unlink();self.assertIsNone(quote_audit_summary())
+
     def test_operational_path_reads_status_files_without_credentials_or_broker_queries(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)

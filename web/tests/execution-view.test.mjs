@@ -42,6 +42,21 @@ test("observed quote reference never replaces risk readiness or historical order
   assert.equal(executionView(t,now).rows.find(r=>r.symbol==='ETH/USD'&&r.frame==='30m').steps.find(s=>s.stage==='Observed bid / ask reference').state,'unknown');
 });
 
+test("dated research summary cannot publish private labels, returns, future data or execution authority", () => {
+  const t=fixture();
+  t.quoteAudit={schema:'first_observed_long_quote_reference_v1',generatedAt:at,orderAuthority:false,winProbability:null,
+    labelCount:2,foldCounts:{discovery:0,validation:2},comparisonCount:1,horizonBars:1,maxExitLagSeconds:120,splitAt:TRACE_START,
+    rejected:{noFirstObservedFreshEntryQuote:10,noTimelyFreshExitReference:3},labels:[{private:'PRIVATE'}],summary:{netPnl:'PRIVATE'}};
+  const result=executionView(t,now);
+  assert.equal(result.quoteAudit.labelCount,2);assert.equal(result.quoteAudit.discovery,0);
+  assert.equal(result.quoteAudit.missingEntryQuotes,10);assert.equal(result.quoteAudit.generatedAt,at);
+  assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
+  for (const change of [{orderAuthority:true},{winProbability:.8},{labelCount:true},{labelCount:3},{generatedAt:'2099-01-01T00:00:00Z'}]) {
+    const invalid={...t,quoteAudit:{...t.quoteAudit,...change}};assert.equal(executionView(invalid,now).quoteAudit,null);
+  }
+  assert.equal(executionView(fixture(),now).quoteAudit,null);
+});
+
 test("stale or future runtime/analysis never reports current gate readiness or a current candidate", () => {
   for (const invalid of ["2026-10-04T18:00:00Z", "2026-10-05T00:00:00Z", "not a time"]) {
     const t = fixture();

@@ -169,6 +169,11 @@ export type PaperTelemetry = {
       cryptoAllowed: string[];
     };
   };
+  quoteAudit?: {
+    schema: "first_observed_long_quote_reference_v1"; generatedAt: string; orderAuthority: false; winProbability: null;
+    labelCount: number; foldCounts: { discovery: number; validation: number }; comparisonCount: number;
+    horizonBars: number; maxExitLagSeconds: number; splitAt: string; rejected: Record<string, number>;
+  } | null;
   marketPipeline?: MarketPipeline;
   multiPaper?: {
     asOf: string;
@@ -290,5 +295,5 @@ export function mergeOperational(broker: PaperTelemetry, value: unknown): PaperT
   if (auto && (auto.winProbability !== null || !Array.isArray(auto.ownedPositions) || auto.ownedPositions.some(p => !p || p.symbol === "AAPL"))) return broker;
   // Explicit whitelist: faster status cannot overwrite prices, positions,
   // fills, decision history, completeness flags or their original timestamps.
-  return { ...broker, marketPipeline: ops.marketPipeline, multiPaper: ops.multiPaper, connections: ops.connections };
+  return { ...broker, marketPipeline: ops.marketPipeline, multiPaper: ops.multiPaper, connections: ops.connections, quoteAudit:ops.quoteAudit };
 }
