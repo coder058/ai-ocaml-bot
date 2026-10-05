@@ -165,6 +165,20 @@ function PrimaryContextEvidence({ value }: { value: unknown }) {
   </div>;
 }
 
+function DerivativeContextEvidence({ value }: { value: unknown }) {
+  const context = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return <div className="primary-context">
+    <p><strong>Current public derivative context</strong><br />{evidenceText(context.source)} · {evidenceText(context.status)}</p>
+    <dl><div><dt>Open interest · native quantity</dt><dd>{evidenceText(context.openInterestRaw)}</dd></div>
+      <div><dt>Funding rate · native, not annualized</dt><dd>{evidenceText(context.fundingRateRaw)}</dd></div>
+      <div><dt>Provider day notional / base volume</dt><dd>{evidenceText(context.dayNotionalVolumeRaw)} / {evidenceText(context.dayBaseVolumeRaw)}</dd></div>
+      <div><dt>Mark / oracle price</dt><dd>{evidenceText(context.markPriceRaw)} / {evidenceText(context.oraclePriceRaw)}</dd></div>
+      <div><dt>Received at</dt><dd>{evidenceText(context.receivedAt)}</dd></div></dl>
+    <p className="analysis-limit">One received observation; no historical open-interest trend confirmation. The provider supplies no observation timestamp. Native quantities and rate are not converted to USD or annualized funding. Public data only; no trade authority or win probability.</p>
+    {Array.isArray(context.missing) && context.missing.length > 0 && <p>Unavailable fields: {evidenceText(context.missing)}</p>}
+  </div>;
+}
+
 function Evidence({ suite, pipeline }: { suite: TechnicalSuite | undefined; pipeline: ChartPipeline }) {
   const [tab, setTab] = useState("Murphy");
   const [allPatterns, setAllPatterns] = useState(false);
@@ -175,7 +189,8 @@ function Evidence({ suite, pipeline }: { suite: TechnicalSuite | undefined; pipe
     {tab === "Murphy" && <div className="murphy-laws">{suite.murphy?.map(law => <article key={law.law}>
       <header><strong>{law.law}. {law.name}</strong><span>{law.status}</span></header>
       {law.law === 1 && <PrimaryContextEvidence value={law.evidence.primaryContext} />}
-      <dl>{Object.entries(law.evidence).filter(([key]) => key !== "primaryContext").map(([key, value]) => <div key={key}><dt>{key === key.toUpperCase() ? key.replaceAll("_", " ") : key.replace(/([a-z])([A-Z])/g, "$1 $2")}</dt><dd>{evidenceText(value)}</dd></div>)}</dl>
+      {law.law === 10 && law.evidence.currentDerivativeContext != null && <DerivativeContextEvidence value={law.evidence.currentDerivativeContext} />}
+      <dl>{Object.entries(law.evidence).filter(([key]) => key !== "primaryContext" && key !== "currentDerivativeContext").map(([key, value]) => <div key={key}><dt>{key === key.toUpperCase() ? key.replaceAll("_", " ") : key.replace(/([a-z])([A-Z])/g, "$1 $2")}</dt><dd>{evidenceText(value)}</dd></div>)}</dl>
     </article>)}<p className="analysis-limit">Descriptive checklist. Swing divergences are exploratory warnings, not trade probabilities. Monthly context, missing or warming native histories and consolidated volume/open interest remain incomplete.</p></div>}
     {tab === "Candlesticks" && <><label className="pattern-toggle"><input type="checkbox" checked={allPatterns} onChange={e => setAllPatterns(e.target.checked)} /> Show every catalog pattern</label>
       <p>TA-Lib signed pattern codes are detections, not confidence or win probabilities.</p>

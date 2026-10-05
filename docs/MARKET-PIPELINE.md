@@ -168,3 +168,38 @@ snapshots are not a controlled improvement measurement or a latency guarantee.
 `archiveQuoteCoverage` records actual archive read status/byte counts, source
 and receipt ages, latest invalid/stale diagnostics and selection. A healthy
 stream process does not guarantee a new valid quote for each instrument.
+
+## Current public derivative context
+
+`research/hip3_asset_context.py` replaces the scanner's existing public `meta`
+catalog request with `metaAndAssetCtxs` for `xyz`. The index-aligned response
+retains the same monitored active catalog; no new products, connections,
+credentials, wallets or execution routes. Invalid tuple length, namespace or
+duplicate symbols fail validation. If context collection fails, a plain catalog
+request preserves the intraday path and reports unavailable metrics rather than
+stamping old values as fresh.
+
+Only documented open interest, funding, day notional/base volume and mark/oracle
+fields are retained. Finite decimal strings preserve native provider precision;
+bad or missing fields are explicitly partial. The provider response has no
+observation timestamp, so the actual HTTP receipt is shown. Units are not
+converted to USD, funding annualized or account costs inferred.
+
+Murphy law 10 and newly first-observed feature rows retain this current context
+separately from OBV/AD/MFI. One observation does not demonstrate historical
+price/OI confirmation: law 10 remains partial, with no order authority or win
+probability. Old first-observed rows remain immutable.
+
+Production verification at 01:54 UTC on 5 October: 91 instruments/455 frames,
+19 descriptive current contexts and no retrieval errors. EUR actual receipt
+01:54:04.231709Z: native OI `21948029.0`, funding `0.0000141582`, provider
+day notional/base volumes `590168.06727` / `524251.9000000001`, mark/oracle
+`1.1238` / `1.1231`. These dated public snapshots are not liquidity guarantees,
+historical confirmation or broker fills.
+
+Verified five adapter tests locally and on Dublin Python 3.10, nine enrichment
+tests including first-feature provenance, eight pipeline tests, 38 frontend
+tests and production build/typecheck. Browser EUR 1h showed the actual public
+fields, receipt and historical-series limitation. No strategy or risk changed.
+
+Source: [Hyperliquid public perpetual metadata/context API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/perpetuals).

@@ -313,7 +313,9 @@ def enrich(result, requested, frame_minutes):
                 law(10, "partial" if available == "descriptive" else available,
                     {"OBV": values("OBV"), "AD": values("AD"), "MFI": values("MFI"),
                      "volumeScope": market["venue"], "openInterest": None,
-                     "missing": "Consolidated volume / open-interest confirmation"}),
+                     **({"currentDerivativeContext": original["currentDerivativeContext"]}
+                        if "currentDerivativeContext" in original else {}),
+                     "missing": "Consolidated volume / historical price and open-interest confirmation"}),
             ]
     result["technicalCoverage"] = {
         "patternCatalog": catalog(), "patternCount": len(CANDLES),
@@ -347,6 +349,7 @@ def forward_reading(reading):
                      ("support", "resistance", "retracements", "trendlines", "chartShapes")},
         "divergences": suite.get("divergences", []),
         "primaryContext": next((law.get("evidence", {}).get("primaryContext") for law in suite.get("murphy", []) if law.get("law") == 1), None),
+        "currentDerivativeContext": next((law.get("evidence", {}).get("currentDerivativeContext") for law in suite.get("murphy", []) if law.get("law") == 10), None),
         "orderAuthority": False, "winProbability": None,
     }
     return compact

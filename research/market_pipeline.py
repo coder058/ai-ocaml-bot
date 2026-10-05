@@ -25,6 +25,7 @@ from stream_capture import credentials as stream_credentials
 from murphy_analysis import enrich, required_seed_bars, forward_reading
 from primary_trend_context import collect as collect_primary_context
 from hip3_primary_context import collect as collect_hip3_primary_context
+from hip3_asset_context import collect as collect_hip3_asset_context
 from decision_quote_capture import collect as collect_decision_quotes
 from archived_quote_reference import augment as augment_archived_quotes
 
@@ -323,7 +324,8 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
         "cryptoAllowed": crypto, "protectedStocks": ["AAPL"],
         "assets": [{k: a.get(k) for k in ("symbol", "name", "exchange", "fractionable", "shortable")}
                    for _, a in sorted(tradeable_stocks.items())]})
-    hl_meta = request(HL_INFO, body={"type": "meta", "dex": "xyz"})
+    hl_meta, derivative_contexts, context_errors = collect_hip3_asset_context(request)
+    errors.extend(context_errors)
     active_hl = {a["name"] for a in hl_meta["universe"] if not a.get("isDelisted")}
     hip3 = [symbol for symbol in HIP3_REQUESTED if symbol in active_hl]
     # GUESS: # UNCALIBRATED GUESS — request two calendar days per seed bar to
@@ -420,6 +422,11 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
                  for venue, symbols in universes.items() for symbol in symbols]
     for market in requested:
         key = market["venue"] + "|" + market["symbol"]
+        if market["venue"] == "Hyperliquid HIP-3":
+            market["currentDerivativeContext"] = derivative_contexts.get(market["symbol"], {
+                "status": "unavailable", "receivedAt": None, "historicalSeries": False,
+                "orderAuthority": False, "winProbability": None,
+                "confirmation": "Current public context unavailable; no historical OI confirmation"})
         market["primaryContext"] = ({**hip3_primary_context.get("markets", {}).get(market["symbol"], {}),
             "missing": "Monthly history; public native daily/weekly context seeds one instrument per scan and may be warming.",
             "orderAuthority": False, "winProbability": None}

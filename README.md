@@ -155,6 +155,12 @@ Thursday weekly grid. All 19 HIP-3 contexts were retrieved by 01:23 UTC on
 5 October; 18 weekly series still lacked EMA50 warmup. Monthly history remains
 incomplete; this descriptive context cannot authorize orders.
 
+The 19 HIP-3 instruments also show current public open interest, funding,
+provider day volume and mark/oracle prices with actual receipt times. These are
+native provider quantities, not annualized funding or a historical OI trend.
+Murphy volume confirmation stays partial; no wallet or order authority is added.
+See [public derivative context](docs/MARKET-PIPELINE.md#current-public-derivative-context).
+
 The current desk shows **Open positions**, **Analysis & execution**, **New paper
 orders** and **Market charts**. Earlier closed-trade history, the old curve and
 CSV export remain hidden after the reset. The new order cohort starts at

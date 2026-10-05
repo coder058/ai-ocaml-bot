@@ -130,6 +130,18 @@ class MurphyTests(unittest.TestCase):
         current = result["markets"][0]["frames"]["1m"]
         self.assertEqual(current["technicalSuite"]["murphy"][0]["evidence"]["primaryContext"], context)
         self.assertEqual(forward_reading(current)["technicalEvidence"]["primaryContext"], context)
+        # SOURCE: synthetic received observation is distinct from a historical
+        # OI/price confirmation and must survive first-feature projection.
+        derivative = {"source": "synthetic public context", "receivedAt": as_of,
+            "openInterestRaw": "50.00", "historicalSeries": False,
+            "orderAuthority": False, "winProbability": None}
+        enrich(result, [{"frames": {"1m": rows}, "currentDerivativeContext": derivative}], {"1m": 1})
+        current = result["markets"][0]["frames"]["1m"]
+        volume_law = current["technicalSuite"]["murphy"][-1]
+        self.assertEqual(volume_law["status"], "partial")
+        self.assertIsNone(volume_law["evidence"]["openInterest"])
+        self.assertEqual(volume_law["evidence"]["currentDerivativeContext"], derivative)
+        self.assertEqual(forward_reading(current)["technicalEvidence"]["currentDerivativeContext"], derivative)
         short_result = {"asOf": as_of, "markets": [{"venue": "fixture", "frames": {"1m": {"trend": "warming"}}}]}
         enrich(short_result, [{"frames": {"1m": rows[-2:]}}], {"1m": 1})
         short_laws = short_result["markets"][0]["frames"]["1m"]["technicalSuite"]["murphy"]
