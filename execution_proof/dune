@@ -1,4 +1,4 @@
 ; SOURCE: keep execution verification separate from the frozen analyzer library.
 (library
  (name execution_proof)
- (libraries yojson unix))
+ (libraries paper_market yojson unix))

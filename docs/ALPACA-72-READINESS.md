@@ -213,3 +213,18 @@ The existing owned SOL position closed by its local invalidation exit; a direct
 broker read verified filled sell 0.831943285 at 119.39 and no remaining SOL
 position. Exact pre-order/broker timestamps are retained in EXECUTION-TRACE-WORK.
 New entries remain disabled. Paper execution is not live profitability evidence.
+
+
+## Unresolved counterpart orders and current buying power — 14:46 UTC
+
+New buys now fail closed when either owned cohort has unresolved durable orders
+or unreadable counterpart state. Existing owned exits continue. Crypto rechecks
+broker buying power before each possible entry instead of reusing the initial
+balance after other actions. Six shared-account and twelve crypto runtime tests
+passed; stock router/scheduler pending-gate regressions passed. This is a partial
+R1 improvement, not an aggregate loss/correlation allocation or readiness claim.
+
+The actual SOL exit is present in the localhost execution API with broker fill
+and exact recorded reason. New entries remain disabled. Inspect final stock
+session-read/freshness timing, broker stops and actual automatic stock lifecycle
+before enabling a paper-entry profile. Broader AI/FX/evaluation scope is unchanged.

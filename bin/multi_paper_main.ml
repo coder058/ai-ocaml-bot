@@ -126,7 +126,11 @@ let run ~execute () =
         "side",`String pending.side; "clientOrderId",`String pending.client_id] :: !actions in
   let account = Paper_broker.account () in
   let account_ok side =
-    match account with
+    (* SOURCE: a prior entry/exit may have changed buying power inside this
+       serialized cycle. Re-read before each possible buy rather than treating
+       the initial account observation as a reusable capital reservation. *)
+    let current_account=if side="buy" then Paper_broker.account () else account in
+    match current_account with
     | Ok ("ACTIVE",false,power) when side="sell" || power >= Multi_paper.entry_usd -> true
     | _ -> failure "all" "Account is blocked, inactive, unavailable or lacks non-marginable buying power"; false in
   (* SOURCE: broker positions/open orders and batched latest quotes are read
@@ -239,6 +243,9 @@ let run ~execute () =
     | _ -> ()) (Multi_paper.active_tickets !state);
   List.iter (fun (signal : Multi_paper.signal) ->
     if Multi_paper.eligible !state signal then
+      match Execution_proof.Portfolio_cycle.entry_clear ~state_dir with
+      | Error error -> failure signal.symbol error
+      | Ok () ->
       match Execution_proof.Native_inputs.verify ~state_dir
         ~as_of:(Option.value ~default:"" (Paper_broker.string (Paper_broker.member "asOf" document)))
         ~venue:"Alpaca crypto" ~symbol:signal.symbol ~frame:signal.frame ~reading:signal.reading with

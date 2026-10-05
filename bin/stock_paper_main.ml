@@ -126,6 +126,7 @@ let run () =
       let exact=unwrap (Exact_decimal.of_string amount) in
       if side="buy" && current<>Exact_decimal.zero then failwith "one position per ticker; no new entry";
       if side="sell" && (exact>own || own=Exact_decimal.zero) then failwith "sell exceeds owned quantity";
+      if side="buy" then ignore (unwrap (Execution_proof.Portfolio_cycle.entry_clear ~state_dir));
       let status,blocked,power=unwrap (Paper_stock_broker.account ()) in
       if status<>"ACTIVE" || blocked then failwith "paper account is not active";
       if side="buy" && power<Exact_decimal.to_float exact then failwith "insufficient non-marginable buying power";

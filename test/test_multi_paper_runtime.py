@@ -62,8 +62,11 @@ if '/orders:by_client_order_id?' in url:
     if key not in data.get('orders',{}): finish({'message':'not found'},404)
     finish(data['orders'][key])
 if url.endswith('/v2/account'):
+    data['account_reads']=data.get('account_reads',0)+1
+    (root/'broker.json').write_text(json.dumps(data))
+    power='100000' if data['account_reads']==1 else data.get('later_buying_power','100000')
     finish({'status':'ACTIVE','trading_blocked':False,'crypto_status':'ACTIVE',
-            'non_marginable_buying_power':'100000'})
+            'non_marginable_buying_power':power})
 if url.endswith('/v2/assets/'+data.get('symbol','ETH/USD').replace('/','')):
     finish({'symbol':data.get('symbol','ETH/USD'),'class':'crypto','status':'active','tradable':True,
             'price_increment':'0.01','min_trade_increment':'0.000000001','min_order_size':'0.01'})
@@ -81,6 +84,16 @@ raise AssertionError('Unexpected synthetic HTTP path: '+url)
 
 @unittest.skipUnless(ENGINE.exists() and os.name == "posix", "requires built Linux OCaml engine")
 class RuntimeTests(unittest.TestCase):
+    def test_entry_rechecks_buying_power_after_initial_account_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            # SOURCE: synthetic lower second balance tests a changing account,
+            # not a calibrated portfolio allocation or observed market result.
+            root=self.setup_fixture(directory,later_buying_power='99')
+            snapshot=self.run_engine(root)
+            self.assertEqual(self.posts(root),[])
+            self.assertGreaterEqual(json.loads((root/'broker.json').read_text())['account_reads'],2)
+            self.assertTrue(any('buying power' in r['reason'] for r in snapshot['abstentions']))
+
     def setup_fixture(self, directory, **broker):
         root = Path(directory)
         executable = root / "curl"
