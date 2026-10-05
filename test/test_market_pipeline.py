@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research"))
-from market_pipeline import RestBudget, alpaca_bars, merge, normalize, session_slots  # noqa: E402
+from market_pipeline import RestBudget, alpaca_bars, merge, normalize, session_slots, relevant_calendar  # noqa: E402
 
 # SOURCE: synthetic UTC minute OHLC fixture for boundary validation.
 ROW = {"t": "2026-10-01T12:00:00Z", "o": 100, "h": 101, "l": 99, "c": 100, "v": 1}
@@ -15,6 +15,23 @@ NOW = datetime(2026, 10, 1, 12, 1, tzinfo=timezone.utc)
 
 
 class PipelineTests(unittest.TestCase):
+    def test_calendar_window_keeps_session_adjacency_missing_bars_and_latest_expectation(self):
+        from murphy_analysis import contiguous
+        # SOURCE: synthetic actual-session slots and gaps, not broker observations.
+        a=int(datetime(2026,10,1,19,58,tzinfo=timezone.utc).timestamp())//60
+        b=int(datetime(2026,10,2,13,30,tzinfo=timezone.utc).timestamp())//60
+        slots={"1m":[a-10,a-1,a,a+1,b,b+1,b+2]}
+        rows=[{**ROW,"t":"2026-10-01T19:59:00Z"},{**ROW,"t":"2026-10-02T13:30:00Z"}]
+        trimmed=relevant_calendar({"1m":rows},slots)
+        self.assertEqual(trimmed["1m"],[a+1,b,b+1,b+2])
+        at="2026-10-02T13:33:00Z"
+        self.assertEqual(contiguous(rows,1,at,slots["1m"]),contiguous(rows,1,at,trimmed["1m"]))
+        gap=rows+[{**ROW,"t":"2026-10-02T13:32:00Z"}]
+        self.assertEqual(len(contiguous(gap,1,at,trimmed["1m"])),1)
+        self.assertEqual(trimmed["1m"][-1],slots["1m"][-1])
+        self.assertEqual(relevant_calendar({},slots),slots)
+        self.assertEqual(relevant_calendar({"1m":[{**ROW,"t":"2026-10-03T00:00:00Z"}]},slots),slots)
+
     def test_open_future_invalid_and_misaligned_bars_never_become_signal_input(self):
         self.assertIsNotNone(normalize(ROW, 1, NOW))
         self.assertIsNone(normalize(ROW, 5, NOW))

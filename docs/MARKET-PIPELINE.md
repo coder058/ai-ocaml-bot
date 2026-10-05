@@ -63,10 +63,45 @@ allowlist for catalog/clock/calendar and no order endpoint.
 
 Current automatic entries are still BTC under `quote_cross_30s_v1`. The separate
 crypto confluence entry gate is paused; its exits/reconciliation remain active.
-The stock paper router is connected but has no automatic strategy authority.
+The stock scheduler is installed in observation, with no automatic new-order
+authority; its tested router and owned-exit path are separate from activation.
 A frame reading is
 not a broker order. More analysis does not establish a profitable policy;
 paper fills are simulated and can differ from live execution.
+
+## Measured scanner work — 5 October
+
+The scanner records monotonic phase durations in `timingsSeconds`: catalog and
+session, native history/cache, primary context, OCaml analysis, descriptive
+technical analysis, quote requests and durable evidence/cache writing. These
+are batch-monitor timings, not exchange-to-order latency. The existing
+`processingSeconds` observation precedes final snapshot serialization/write;
+phase totals can include subsequent evidence/cache work.
+
+Unchanged frames now avoid repeated identical cache checkpoint writes. Changed
+frames still persist before proceeding, allowing initial warmup to resume; the
+final journal/emitted checkpoint remains after the append. Old cached data and
+raw journals are preserved.
+
+Per-instrument calendar windows retain every expected slot at or after the
+first stored candle, including gaps, latest expectations and future sessions.
+Empty/out-of-calendar cases preserve the original calendar to prevent the
+OCaml 24/7 fallback. This avoids repeating irrelevant old session arrays in
+every stock's payload without weakening missing-bar checks.
+
+At 00:47 UTC, one read-only paired run on the same actual cached input produced
+**exactly identical complete OCaml plus TA-Lib/Murphy output for 91 instruments
+and 455 frames**. Input JSON: 50,002,568 bytes with full calendars versus
+9,713,924 bytes with relevant calendars. OCaml runs: 3.5395 / 0.8453 seconds;
+descriptive analysis: 5.6430 / 3.6441 seconds. Output SHA-256 for both:
+`0ceb0ab2b1c68e3250090fa4cadee5c9c9b4d6b2635bfd5d941397882a553e83`.
+These are one run pair, not a latency percentile or controlled production benchmark.
+
+The subsequent actual 00:49 production scan reported 18.4545 seconds, 91
+instruments and no retrieval errors. This is a point observation; five-minute,
+hourly, bootstrap and rate-budget refreshes can take longer than one minute.
+Seven pipeline tests and nine Murphy tests passed on Dublin. No entry policy,
+warmup rule, risk gate or calibrated probability was changed.
 
 Sources: [Alpaca native crypto bars](https://docs.alpaca.markets/us/reference/cryptobars-1),
 [Alpaca trading-account market support](https://docs.alpaca.markets/us/docs/account-plans),

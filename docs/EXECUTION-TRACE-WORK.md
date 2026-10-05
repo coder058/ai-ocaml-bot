@@ -31,7 +31,7 @@ Readiness means a tested and understandable engineering system, not profitabilit
 
 ## Next required verification
 
-The monitor now has 455 chart previews, descriptive TA-Lib/Murphy detail and a per-frame execution trace. The stock scheduler is tested and installed in observation. Next work is execution-aware prospective evaluation and actual daily/weekly primary-trend context; observation is not verified stock execution. Broker history reset remains preserved.
+The monitor has 455 chart previews, descriptive TA-Lib/Murphy detail, a per-frame execution trace, native Alpaca daily/weekly context and a dated quote-reference audit. The stock scheduler is tested and installed in observation; no policy has been promoted by the negative, small crypto quote samples. Next work is open-session stock evidence, unsupported/credentialed venue expansion and remaining primary context outside Alpaca. Observation is not verified stock execution. Broker history reset remains preserved.
 
 ## 2026-10-04: execution trace milestone
 
@@ -105,3 +105,12 @@ The monitor now has 455 chart previews, descriptive TA-Lib/Murphy detail and a p
 - Dated validation panel commit c91fa0f passed both CI jobs in run 37246972632. Next: browser check of actual invalid-quote explanation, scoped publication, and measure scanner stage durations before attempting a latency improvement. Current native pipeline is a minute-scanned monitor, not a measured HFT executor.
 - Browser verified DIA 1m's exact invalid bid/ask diagnostic and the disabled regular-session stock route; risk remains unknown. Restored the full 455-cell matrix after the check; proof .local/invalid-quote-explanation-proof.png. The five no-data cells are FXB 1m/5m, FXC 1m and FXA 1m/5m: requested IEX history returned no closed bars. No invented candles or replacement spot-FX instruments.
 - Real scanner journal: 00:30 scheduled scan took 76.54 seconds, followed by a successful 29.17-second scan and a later fresh 00:32 snapshot. The minute timer does not guarantee subminute refresh, and a temporarily stale monitor snapshot is reported unverified. Measure component time before changing guards or making latency claims.
+
+## Scanner latency diagnosis and verified calendar projection — 00:50 UTC
+
+- Added actual monotonic phase measurements. At 00:35: history/cache 27.7301s, shared OCaml 4.2438s, descriptive TA 4.0946s. Working cache was 13,360,809 bytes and retained 124 historical market keys, while the actual current universe remained 91. Preserved inactive data; no destructive cache cleanup.
+- Removed identical per-frame checkpoint writes only when nothing was fetched/changed; changed frames and the final durable journal/cache ordering still persist. Actual 00:39 scan 25.2085s, native history/cache 8.1392s; 00:40 larger refresh 30.6810s. These are different production scans, not a controlled before/after benchmark.
+- Found redundant old session arrays in every stock's analyzer payload. Retained per-instrument expected slots from its first stored candle onward, including every missing-latest/gap/future-session check. Empty and out-of-calendar inputs keep the original arrays. Seven pipeline tests passed on Dublin; nine Murphy tests also passed during instrumented scanner verification.
+- Actual paired read-only verification at 00:47 on the same frozen cached input: 91 instruments/455 frames, exact complete OCaml and TA-Lib/Murphy parity. Input 50,002,568 versus 9,713,924 bytes; engine 3.5395/0.8453s, enrichment 5.6430/3.6441s. Common output SHA-256 0ceb0ab2b1c68e3250090fa4cadee5c9c9b4d6b2635bfd5d941397882a553e83. Private parity report records cache input hash bdf5d5a8ce0a04266db4a96e88b7b8ba4e1207ba351923d097e64f0673d33ff3. It is one run pair, not a production percentile/HFT claim.
+- Subsequent actual 00:49 scanner: 18.4545s, no retrieval errors and 91 instruments. Shared OCaml 1.0160s, descriptive TA 3.7236s. Minute scheduling can still exceed one minute at larger refreshes or rate-budget waits. No policy/risk/freshness threshold changed.
+- Stream/diagnostic commit 186a12f passed both CI jobs in run 37247978487. Next: scoped scanner publication and current runtime/browser verification, then native primary context outside Alpaca with documented data/REST limits if feasible. Stock policy remains unarmed, spot FX credentials missing, HIP-3 data-only and no edge demonstrated.

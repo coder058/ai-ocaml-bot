@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from bisect import bisect_left
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -227,6 +228,28 @@ def session_slots(calendar: list[dict], minutes: int) -> list[int]:
     return sorted(slots)
 
 
+def relevant_calendar(frames: dict, slots: dict) -> dict:
+    """Drop only calendar history preceding this instrument's retained candles.
+
+    Keep all later expected slots, including missing bars and future sessions,
+    so adjacency and missing-latest checks cannot be relaxed by the projection.
+    """
+    result={}
+    for frame,starts in slots.items():
+        rows=frames.get(frame,[])
+        if rows:
+            # SOURCE: session_slots and the OCaml engine use UTC minutes. Native
+            # cache rows are sorted by merge; retain the first candle's slot.
+            first=int(instant(rows[0]["t"]).timestamp())//60
+            trimmed=starts[bisect_left(starts,first):]
+            # Preserve original behavior if the candle lies outside this
+            # calendar; an empty array would switch OCaml to its 24/7 fallback.
+            result[frame]=trimmed or starts
+        else:
+            result[frame]=starts
+    return result
+
+
 def hip3_bars(symbol: str, frame: str, start: datetime, as_of: datetime) -> list[dict]:
     minutes, _ = FRAMES[frame]
     payload = request(HL_INFO, body={"type": "candleSnapshot", "req": {
@@ -262,6 +285,15 @@ def atomic(path: Path, document: dict) -> None:
 
 def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     started = time.monotonic()
+    # SOURCE: measured monotonic elapsed seconds per scanner phase. These are
+    # operational timings, not exchange-to-order latency or fitted thresholds.
+    timings = {}
+    phase_started = started
+    def elapsed(name):
+        nonlocal phase_started
+        now = time.monotonic()
+        timings[name] = now - phase_started
+        phase_started = now
     as_of = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     key, secret = stream_credentials()
     credentials = {"APCA_API_KEY_ID": key, "APCA_API_SECRET_KEY": secret}
@@ -298,6 +330,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     equity_slots = {name: session_slots(calendar, minutes) for name, (minutes, _) in FRAMES.items()}
     universes = {"Alpaca crypto": crypto, "Alpaca equities": equities,
                  "Hyperliquid HIP-3": hip3}
+    elapsed("catalog_and_session")
     for venue, symbols in universes.items():
         for symbol in symbols:
             markets.setdefault(f"{venue}|{symbol}", {"symbol": symbol, "venue": venue,
@@ -305,6 +338,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     # SOURCE: slower frames first; fetch 1m last so the short horizon is freshest
     # after bootstrap. Native intervals are queried independently, not fabricated.
     for frame in reversed(FRAMES):
+        frame_changed = False
         minutes, _ = FRAMES[frame]
         for venue, symbols in universes.items():
             # SOURCE: each provider batch uses its current retrieval boundary;
@@ -342,6 +376,7 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
                         errors.append({"venue": venue, "symbol": symbol, "frame": frame,
                                        "error": type(error).__name__})
             for symbol, new_rows in fetched.items():
+                frame_changed = True
                 market = markets[f"{venue}|{symbol}"]
                 if venue == "Alpaca equities":
                     allowed = set(equity_slots[frame])
@@ -351,7 +386,11 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
                     "requestedAsOf": utc(boundaries[symbol]), "retrievedAt": utc(datetime.now(timezone.utc))}
         # Persist completed frames during slow initial seed, so a failed/restarted
         # seed can resume. Missing symbols/frames still report no data explicitly.
-        atomic(cache_path, cache)
+        # Persist every changed frame for restart-safe warmup. Unchanged slower
+        # frames do not need another identical multi-megabyte JSON checkpoint.
+        if frame_changed:
+            atomic(cache_path, cache)
+    elapsed("native_history_and_cache")
     try:
         cache["primaryContext"] = collect_primary_context(request, paper_get, STOCK_BARS, CRYPTO_BARS,
             universes, credentials, datetime.now(timezone.utc), cache.get("primaryContext"))
@@ -360,11 +399,12 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
         # data/OMS path or silently present an old context as newly retrieved.
         errors.append({"stage": "primary_context", "error": type(error).__name__})
     primary_context = cache.get("primaryContext", {})
+    elapsed("native_primary_context")
     final_as_of = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     requested = [{**markets[f"{venue}|{symbol}"],
                   "frames": {name: markets[f"{venue}|{symbol}"]["frames"].get(name, [])
                              for name in FRAMES},
-                  **({"expectedStarts": equity_slots, "sessionOpen": clock.get("is_open") is True}
+                  **({"expectedStarts": relevant_calendar(markets[f"{venue}|{symbol}"]["frames"],equity_slots), "sessionOpen": clock.get("is_open") is True}
                      if venue == "Alpaca equities" else {})}
                  for venue, symbols in universes.items() for symbol in symbols]
     for market in requested:
@@ -379,8 +419,11 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     if proc.returncode:
         raise RuntimeError("shared OCaml analysis failed")
     result = json.loads(proc.stdout)
+    elapsed("shared_ocaml_analysis")
     enrich(result, requested, {name: minutes for name, (minutes, _) in FRAMES.items()})
+    elapsed("descriptive_technical_analysis")
     quote_references, quote_errors = collect_decision_quotes(request, universes, credentials)
+    elapsed("quote_reference_requests")
     errors.extend(quote_errors)
     seen_quotes = cache.setdefault("recordedQuoteReferences", {})
     with output.with_name("market-quotes-reference.jsonl").open("a", encoding="utf-8") as target:
@@ -428,12 +471,14 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
             target.flush()
             os.fsync(target.fileno())
     atomic(cache_path, cache)
+    elapsed("evidence_and_cache_write")
+    result["timingsSeconds"] = timings
     result["newFrameDecisions"] = len(decisions)
     result["currentCandidates"] = sum(reading.get("candidate") is not None
         for market in result["markets"] for reading in market["frames"].values())
     atomic(output, result)
     print(json.dumps({"asOf": result["asOf"], "markets": len(requested), "errors": len(errors),
-                      "processingSeconds": result["processingSeconds"]}), flush=True)
+                      "processingSeconds": result["processingSeconds"],"timingsSeconds":timings}), flush=True)
     return result
 
 

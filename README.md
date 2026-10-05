@@ -53,6 +53,15 @@ shapes/EMA trend; full TA-Lib supplies separate descriptive Python analysis. No
 calibrated winning probability is displayed. See [execution work evidence](docs/EXECUTION-TRACE-WORK.md)
 and the [stock scheduler/owned-exit runbook](docs/STOCK-AUTOMATION.md).
 
+The dated [first-observed quote audit](docs/FORWARD-QUOTE-AUDIT.md) keeps original
+feature/entry receipts, rejects missing liquidity and compares later REST/stream
+bid references on the same input. Conditional published fees are distinguished
+from verified account fees. The current small crypto confluence subset was
+negative under that scenario; it did not authorize stock or crypto policy
+activation. The monitor shows this research limitation separately from fills.
+Scanner performance work preserves exact full-analysis parity; measurements
+and their limits are recorded in [the pipeline guide](docs/MARKET-PIPELINE.md).
+
 - The Dublin collector archives Alpaca US BTC/USD WebSocket quotes, trades,
   order books, closed-minute bars and later bar revisions with receipt times.
   It also archives ETH and SOL quotes and minute bars. New crypto entries are
