@@ -456,7 +456,9 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     # subsequent first observations retain it without repairing old journals.
     result, engine_sha256 = analyze_fingerprinted(payload, engine)
     elapsed("shared_ocaml_analysis")
-    enrich(result, requested, {name: minutes for name, (minutes, _) in FRAMES.items()})
+    descriptive_timings = []
+    enrich(result, requested, {name: minutes for name, (minutes, _) in FRAMES.items()},
+           timing_sink=descriptive_timings)
     elapsed("descriptive_technical_analysis")
     quote_references, quote_errors = collect_decision_quotes(request, universes, credentials)
     elapsed("quote_reference_requests")
@@ -485,7 +487,6 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
             # previous first-observed feature row with a later market price.
             reading["quoteReference"] = quote
     result.update({"retrievedAt": utc(datetime.now(timezone.utc)), "errors": errors,
-                   "processingSeconds": time.monotonic() - started,
                    "marketsAnalyzed": len(requested),
                    "framesRequested": list(FRAMES), "brokerOrderSymbols": ["BTC/USD"],
                    "pipeline": ["Data", "Closed candles", "OCaml analysis", "Evidence and risk", "Paper orders"]})
@@ -543,6 +544,13 @@ def scan(cache_path: Path, output: Path, engine: Path = ENGINE) -> dict:
     result["engineSha256"] = engine_sha256
     result["currentCandidates"] = sum(reading.get("candidate") is not None
         for market in result["markets"] for reading in market["frames"].values())
+    # SOURCE: actual monotonic scan time through evidence/cache writes. Earlier
+    # snapshots measured before those writes; do not reinterpret old durations.
+    # This excludes final snapshot publication and any broker submission.
+    result["processingSeconds"] = time.monotonic() - started
+    result["timingScope"] = "scan_start_through_evidence_cache_before_snapshot_publication"
+    result["descriptiveAnalysisTiming"] = {"mode": "sequential", "markets": descriptive_timings,
+        "scope": "Python/C technical extension and Murphy panels; excludes OCaml, data requests, publication and broker submission"}
     atomic(output, result)
     print(json.dumps({"asOf": result["asOf"], "markets": len(requested), "errors": len(errors),
                       "processingSeconds": result["processingSeconds"],"timingsSeconds":timings}), flush=True)

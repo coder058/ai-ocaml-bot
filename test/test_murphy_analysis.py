@@ -2,6 +2,7 @@
 import sys
 import json
 import unittest
+import copy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -23,6 +24,25 @@ def fixture(count=150):
 
 
 class MurphyTests(unittest.TestCase):
+    def test_measured_timings_do_not_change_features_or_hide_invalid_frames(self):
+        rows, as_of = fixture()
+        source = {"asOf": as_of, "markets": [{"venue": "fixture", "frames": {
+            "1m": {"trend": "rising"}, "5m": {"trend": "warming"}}}]}
+        requested = [{"symbol": "fixture", "frames": {"1m": rows, "5m": [{"t": "invalid"}]}}]
+        plain, measured = copy.deepcopy(source), copy.deepcopy(source)
+        enrich(plain, requested, {"1m": 1, "5m": 5})
+        durations = []
+        enrich(measured, requested, {"1m": 1, "5m": 5}, timing_sink=durations)
+        self.assertEqual(measured, plain)
+        self.assertEqual(len(durations), len(requested))
+        timing = durations[0]
+        self.assertEqual(timing["symbol"], "fixture")
+        self.assertEqual(set(timing["frames"]), {"1m", "5m"})
+        self.assertEqual(timing["frames"]["5m"]["status"], "invalid")
+        self.assertEqual(timing["frames"]["1m"]["inputBars"], len(rows))
+        self.assertGreaterEqual(timing["murphyPanelsSeconds"], 0)
+        self.assertGreaterEqual(timing["seconds"], sum(row["seconds"] for row in timing["frames"].values()))
+
     def test_double_top_and_head_shoulders_require_actual_neckline_close(self):
         # SOURCE: hand-constructed OHLC paths with confirmed peaks and troughs.
         def path(closes):

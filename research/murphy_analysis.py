@@ -8,6 +8,7 @@ https://stockcharts.com/ten-laws/murphys-ten-laws.pdf
 from __future__ import annotations
 
 import math
+import time
 from datetime import datetime, timezone
 
 import numpy as np
@@ -265,9 +266,17 @@ def analyze_frame(rows, minutes, as_of, expected_starts=()):
             "winProbability": None}
 
 
-def enrich(result, requested, frame_minutes):
+def enrich(result, requested, frame_minutes, *, timing_sink=None):
+    """Optionally record measured descriptive work outside decision features.
+
+    Durations include validation and missing/warming paths. They exclude OCaml,
+    provider requests, publication and broker submission. Markets run serially.
+    """
     for market, original in zip(result["markets"], requested, strict=True):
+        market_started = time.perf_counter() if timing_sink is not None else None
+        frame_timings = {}
         for frame, minutes in frame_minutes.items():
+            frame_started = time.perf_counter() if timing_sink is not None else None
             reading = market["frames"][frame]
             try:
                 extension = analyze_frame(original["frames"][frame], minutes, result["asOf"],
@@ -280,6 +289,10 @@ def enrich(result, requested, frame_minutes):
                 # SOURCE: historical confirmation and current evaluation are
                 # different timestamps. Forward journal observedAt records receipt.
                 warning["evaluatedAsOf"] = result["asOf"]
+            if timing_sink is not None:
+                frame_timings[frame] = {"seconds": time.perf_counter() - frame_started,
+                    "inputBars": len(original["frames"][frame]), "status": extension["status"]}
+        panels_started = time.perf_counter() if timing_sink is not None else None
         for frame, reading in market["frames"].items():
             suite = reading["technicalSuite"]
             geometry_values = suite.get("geometry", {})
@@ -318,6 +331,10 @@ def enrich(result, requested, frame_minutes):
                         if "currentDerivativeContext" in original else {}),
                      "missing": "Consolidated volume / historical price and open-interest confirmation"}),
             ]
+        if timing_sink is not None:
+            timing_sink.append({"venue": market["venue"], "symbol": original.get("symbol"),
+                "frames": frame_timings, "murphyPanelsSeconds": time.perf_counter() - panels_started,
+                "seconds": time.perf_counter() - market_started})
     result["technicalCoverage"] = {
         "patternCatalog": catalog(), "patternCount": len(CANDLES),
         "indicatorCount": len(FUNCTIONS), "indicatorCatalog": [
