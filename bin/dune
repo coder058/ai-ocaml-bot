@@ -14,12 +14,12 @@
  (libraries paper_market yojson unix))
 
 (executable
-(name multi_paper_main)
+ (name multi_paper_main)
  (modules multi_paper_main)
  (libraries paper_market execution_proof yojson unix))
 
 (executable
-(name stock_paper_main)
+ (name stock_paper_main)
  (modules stock_paper_main)
  (libraries paper_market execution_proof yojson unix))
 

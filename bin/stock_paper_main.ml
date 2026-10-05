@@ -241,5 +241,6 @@ let run () =
 let () =
   let fd=Unix.openfile (path "stock-paper.lock") [Unix.O_WRONLY;Unix.O_CREAT] 0o640 in
   Fun.protect ~finally:(fun ()->Unix.close fd) (fun ()->
-    try Unix.lockf fd Unix.F_TLOCK 0;run ()
+    try Unix.lockf fd Unix.F_TLOCK 0;
+      Execution_proof.Portfolio_cycle.run ~state_dir run
     with error->prerr_endline ("stock paper router: " ^ Printexc.to_string error);exit 1)

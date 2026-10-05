@@ -36,6 +36,7 @@ jobs:
           python -m unittest discover -s test -p test_incremental_analysis.py -v
           python -m unittest discover -s test -p test_decision_inputs.py -v
           python -m unittest discover -s test -p test_verify_decision_input.py -v
+          python -m unittest discover -s test -p test_portfolio_cycle.py -v
           python -m unittest discover -s test -p test_primary_trend_context.py -v
           python -m unittest discover -s test -p test_hip3_primary_context.py -v
           python -m unittest discover -s test -p test_hip3_asset_context.py -v

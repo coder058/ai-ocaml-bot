@@ -200,3 +200,16 @@ RELATED-DATA-INVENTORY.md. September news receipts cannot be used for decisions
 in May–August recordings. This resolves part of data discovery, not A1/A2 AI
 training/calibration or strategy deployment. CI for incremental commit 03160b1
 passed both jobs in run 37320658710. No completion, edge or profit claim.
+
+
+## Shared account cycle and actual owned exit — 14:38 UTC
+
+Stock and crypto routers now serialize account cycles through the same POSIX
+lock before HTTP or durable ledger work. Real cross-router kernel exclusion and
+existing pending/partial-fill/exit regressions passed. This resolves concurrent
+cycles on the current VPS, not R1 aggregate loss/correlation/reservation limits.
+
+The existing owned SOL position closed by its local invalidation exit; a direct
+broker read verified filled sell 0.831943285 at 119.39 and no remaining SOL
+position. Exact pre-order/broker timestamps are retained in EXECUTION-TRACE-WORK.
+New entries remain disabled. Paper execution is not live profitability evidence.

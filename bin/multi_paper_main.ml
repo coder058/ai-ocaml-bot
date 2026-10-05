@@ -290,5 +290,6 @@ let () =
   let execute = Array.exists ((=) "--execute") Sys.argv in
   let fd = Unix.openfile (path "multi-paper.lock") [Unix.O_WRONLY;Unix.O_CREAT] 0o640 in
   Fun.protect ~finally:(fun () -> Unix.close fd) (fun () ->
-    try Unix.lockf fd Unix.F_TLOCK 0; run ~execute ()
+    try Unix.lockf fd Unix.F_TLOCK 0;
+      Execution_proof.Portfolio_cycle.run ~state_dir (fun ()->run ~execute ())
     with error -> prerr_endline ("multi-paper stopped: " ^ Printexc.to_string error); exit 1)
