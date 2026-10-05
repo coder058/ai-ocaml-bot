@@ -175,3 +175,27 @@ Stream 4 October 44,033,079 bytes, SHA-256
 `4f80589ea14482f7a33c8a7c175f94054f4e3f1e125ac363f8166df5bb9415bc`.
 REST 314,171 bytes, SHA-256
 `fec08b5e0868fef2dc23f360c4a4c4b0ec9e0e8f6b9b2a858197a74abcfa7f75`.
+
+## Unchanged frozen attempt — 2026-10-05 05:44:04 UTC
+
+Private artifact `reports/forward-stream-quote-20261005T054343Z.json` retains
+393 stream references, all later fold, zero discovery; 324 share an exact label
+identity with the same-prefix REST baseline. Entry sources: 183 not recorded,
+179 REST and 31 originally archived WebSocket. These are overlapping reference
+labels, not broker trades or independent validation of an optimized policy.
+
+The originally recorded long confluence subset has 17 references, mean
+ask-to-bid movement -2.6909447161938647 bps and conditional published T1 scenario
+-52.615006811016244 bps, with zero positive after-scenario references. No policy,
+horizon, fee assumption, temporal boundary or original entry was changed.
+No stock execution evidence, calibrated probability or edge is established.
+
+Feature prefix: 411,010,805 bytes, SHA-256
+`45e4d47e1b61fe338225ff5256fb4865250f37ac54634bfd16a04e1d378b69a7`.
+Stream October 4: 44,033,079 bytes, SHA-256
+`541c755dbff5ef5b9f8cb34f12a42ef8bd8c8ca38af4dbe3a185e78258498339`;
+October 5: 23,905,183 bytes, SHA-256
+`5c301df74a119297757d43ea19eeecaea307e169bd5ec4e8535e21523e115fe0`.
+The monitor's existing collapsed report remains its explicitly dated original
+92-reference attempt; it is not relabeled as this newer report. Negative
+quote scenarios do not justify activating the candle policy.

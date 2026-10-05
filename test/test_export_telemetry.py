@@ -247,6 +247,24 @@ class DecisionHistoryTests(unittest.TestCase):
 
 
 class PublicProjectionTests(unittest.TestCase):
+    def test_private_fee_cache_retains_only_actual_provenance_without_public_or_inferred_order_links(self):
+        # SOURCE: synthetic fee provenance; creation date is intentionally later
+        # than activity date and must never be used as a trade/order join.
+        row={'id':'synthetic-fee','activity_type':'CFEE','description':'Coin Pair Transaction Fee (USD)',
+            'net_amount':'-0.25','date':'2026-10-04','created_at':'2026-10-05T00:00:00Z',
+            'currency':'USD','status':'executed','account_id':'PRIVATE','secret':'PRIVATE'}
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'fee-cache.json'
+            with patch('export_telemetry.paper_get',side_effect=[[row],[]]):
+                summary=broker_crypto_fees({},True,use_cache=True,cache_path=path)
+            retained=json.loads(path.read_text())['activities'][0]
+            self.assertEqual(retained['date'],row['date']);self.assertEqual(retained['created_at'],row['created_at'])
+            self.assertEqual(retained['currency'],'USD');self.assertEqual(retained['status'],'executed')
+            self.assertIsNone(retained['order_id']);self.assertIsNone(retained['transaction_time'])
+            self.assertNotIn('PRIVATE',json.dumps(retained));self.assertNotIn('date',summary)
+            self.assertNotIn('order_id',summary);self.assertNotIn('PRIVATE',json.dumps(summary))
+            with patch('export_telemetry.paper_get',side_effect=AssertionError('cached rows only')):
+                self.assertEqual(summary,broker_crypto_fees({},True,use_cache=True,cache_path=path))
     def test_public_positions_exclude_non_bot_holdings(self) -> None:
         # SOURCE: synthetic amounts only identify which account row is omitted.
         positions = [

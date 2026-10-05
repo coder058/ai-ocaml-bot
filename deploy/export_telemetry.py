@@ -271,7 +271,11 @@ def broker_crypto_fees(credentials: dict[str, str],
                     temporary = cache_path.with_suffix(".tmp")
                     cache_rows = [{key: row.get(key) for key in (
                         "id", "activity_type", "description", "symbol", "qty", "price",
-                        "net_amount", "created_at")}
+                        # SOURCE: official activity provenance plus fields only
+                        # when the actual broker supplies them. A missing order
+                        # link/time stays null; date/created_at is not a fill time.
+                        "net_amount", "created_at", "date", "currency", "status",
+                        "order_id", "transaction_time")}
                         for row in activities_by_id.values()]
                     temporary.write_text(json.dumps({"fetchedAt": fetched_at,
                                                      "pagesComplete": True,

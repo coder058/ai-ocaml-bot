@@ -82,3 +82,22 @@ final scorer SHA-256
 `882b868bf7b223cb2e1d9dd44db135abdafc89cb73b0cffd168811f395d3ea6e`.
 The saved latest report uses that exact deployed source. These additional labels
 do not change the policy decision or remove the stated limits.
+
+## Unchanged model, frozen prefix — 2026-10-05 05:44:10 UTC
+
+Private artifact `reports/markov-score-20261005T054343Z.json`: 2,130 predictions,
+2,126 scored and four unlabeled. Brier 0.24970861040529727 versus frozen base
+0.25000357726235367; mean directional native bar-close movement
+0.416721159138157 bps. Four directional moves exceed the conditional published
+50 bps linearized two-leg fee-only hurdle. Lead times differ: minimum 3.525722,
+median 293.7046925 and maximum 299.494861 seconds. These are not uniform full
+five-minute forecasts, bid/ask execution results or calibrated trade probabilities.
+
+Journal prefix: 1,731,764 bytes, SHA-256
+`8a2651fd66167890674105e677c4831e8c624fdc4398fb65345588cece8605b3`.
+Scorer SHA-256 remains
+`882b868bf7b223cb2e1d9dd44db135abdafc89cb73b0cffd168811f395d3ea6e`;
+canonical model remains
+`9604f797e9287f86254da95953824ec9a1c6c275e0219d91a350e57e9abb29c5`.
+No retraining, policy selection or order authority. The small squared-error
+difference and dependent native-close labels do not demonstrate executable edge.
