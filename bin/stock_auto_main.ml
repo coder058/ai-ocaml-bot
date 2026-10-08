@@ -71,6 +71,9 @@ let run ()=
   List.iter (fun ticker->
     if owned ticker !rows>Exact_decimal.zero then match managed ticker !rows with
       | None->block ticker "Existing stock inventory has no managed policy entry; no automatic adoption"
+      | Some entry when Option.bind (field "analysisEvidence" entry) (fun e->Paper_broker.string (field "policy" e))
+          =Some Monthly_trend.policy -> ()
+        (* SOURCE: month-end trend positions are exited only by monthly_trend_main. *)
       | Some _ when pending ticker !rows->block ticker "Pending owned stock order must reconcile before any exit or entry"
       | Some entry ->
         let evidence=Option.get (field "analysisEvidence" entry) in

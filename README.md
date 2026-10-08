@@ -5,6 +5,12 @@ The active project is [Event Desk](https://github.com/coder058/event-desk).
 Retained behavior below describes the historical implementation; see the
 [shutdown record](docs/history/SHUTDOWN.md) for actual service and broker checks.
 
+**8 October 2026 profitability review:** the intraday strategies lost because
+their measured gross moves (about 0.1–5 bps) cannot clear the ≈50 bps crypto
+round-trip cost. A month-end ETF trend rule (`monthly_trend_v1`) passed a frozen
+develop/validate/holdout screen after costs and is implemented behind the paper
+router in observe mode. See [the profitability review](docs/PROFITABILITY-REVIEW.md).
+
 An auditable live market monitor and **Alpaca paper-only** execution experiment,
 written in OCaml. This is an independent portfolio project, not affiliated with
 Alpaca. It does not claim a profitable strategy.

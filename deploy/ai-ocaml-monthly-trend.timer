@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the month-end ETF trend scheduler once per weekday session
+
+[Timer]
+# SOURCE: 15:05 UTC is inside the regular US session in both EDT and EST.
+# The decision only changes at month boundaries; daily runs retry a missed
+# first-session order and reconcile. Holidays simply observe a closed session.
+OnCalendar=Mon..Fri *-*-* 15:05:00
+Persistent=true
+Unit=ai-ocaml-monthly-trend.service
+
+[Install]
+WantedBy=timers.target

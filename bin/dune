@@ -27,3 +27,8 @@
  (name stock_auto_main)
  (modules stock_auto_main)
  (libraries paper_market yojson unix))
+
+(executable
+ (name monthly_trend_main)
+ (modules monthly_trend_main)
+ (libraries paper_market yojson unix))

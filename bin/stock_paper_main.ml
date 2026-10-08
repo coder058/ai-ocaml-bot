@@ -73,6 +73,24 @@ let argument name =
   let args=Array.to_list Sys.argv in
   let rec find=function key::value::_ when key=name->Some value | _::rest->find rest | []->None in
   find args
+let utc_today ()=let t=Unix.gmtime (Unix.gettimeofday ()) in (t.tm_year+1900,t.tm_mon+1,t.tm_mday)
+(* Month-end ETF trend intents. The decision is recomputed here from the
+   intent's own retained daily closes; the scheduler's verdict is not trusted. *)
+let trend_evidence ~orders ~ticker ~side ~cid ~exact evidence =
+  if Sys.getenv_opt "TREND_AUTO_ORDERS"<>Some "1" then failwith "automatic trend paper gate is not armed";
+  let reading=unwrap (Monthly_trend.verify_intent ~today:(utc_today ()) ~symbol:ticker ~side ~client_id:cid evidence) in
+  if side="buy" && exact<>unwrap (Exact_decimal.of_float Multi_paper.entry_usd) then
+    failwith "automatic trend entry must use the user baseline";
+  if side="sell" then (
+    let origin=get_string "originEntryId" evidence in
+    match List.find_opt (fun row->get_string "symbol" row=ticker && get_string "side" row="buy") (List.rev orders) with
+    | Some row when get_string "clientOrderId" row=origin &&
+        Option.bind (field "analysisEvidence" row) (fun e->string (field "policy" e))=Some Monthly_trend.policy -> ()
+    | _->failwith "trend exit has no owned trend entry");
+  let quote_doc=unwrap (Paper_stock_broker.quotes [ticker]) in
+  let quote=unwrap (Stock_policy.quote ~now:(Unix.gettimeofday ()) ~symbol:ticker quote_doc) in
+  replace "reading" (Monthly_trend.reading_to_json reading)
+    (replace "preflight" (`Assoc ["quoteTime",`String quote.timestamp;"bid",`Float quote.bid;"ask",`Float quote.ask]) evidence)
 let run () =
   let orders=ref (read_orders ()) in
   let ids=List.map (fun row->get_string "clientOrderId" row) !orders in
@@ -135,6 +153,7 @@ let run () =
         | None->`Null
         | Some file ->
           let evidence=Yojson.Safe.from_file file in
+          if get_string "policy" evidence=Monthly_trend.policy then trend_evidence ~orders:!orders ~ticker ~side ~cid ~exact evidence else (
           if get_string "symbol" evidence<>ticker || get_string "clientOrderId" evidence<>cid ||
              get_string "side" evidence<>side || get_string "policy" evidence<>"trend_candle_confluence_v1" then
             failwith "automatic stock intent identity mismatch";
@@ -182,7 +201,7 @@ let run () =
             "buyingPowerSufficient",(if side="buy" then `Bool true else `Null);
             "brokerQuantity",`String (Exact_decimal.to_string current);
             "ownedQuantity",`String (Exact_decimal.to_string own);"existingOrders",`Bool false;
-            "quoteTime",`String quote.timestamp;"bid",`Float quote.bid;"ask",`Float quote.ask]) evidence in
+            "quoteTime",`String quote.timestamp;"bid",`Float quote.bid;"ask",`Float quote.ask]) evidence) in
       if not (Array.exists ((=) "--execute") Sys.argv) then
         print_endline (Yojson.Safe.to_string (`Assoc ["dryRun",`Bool true;"request",Yojson.Safe.from_string body]))
       else (
@@ -203,7 +222,9 @@ let run () =
           let quote_at=Option.bind (Paper_broker.string quote_time) Stock_policy.timestamp in
           let quote_fresh=match quote_at with Some at ->
             boundary_now>=at && boundary_now-.at<=Multi_paper.max_quote_age_seconds | None->false in
-          let signal_current=side="sell" || match Stock_policy.signals ~now:boundary_now
+          let signal_current=if get_string "policy" evidence=Monthly_trend.policy then
+            Result.is_ok (Monthly_trend.verify_intent ~today:(utc_today ()) ~symbol:ticker ~side ~client_id:cid evidence)
+          else side="sell" || match Stock_policy.signals ~now:boundary_now
             (Option.value ~default:`Null (field "analysis" evidence)) with
             | Ok signals->List.exists (fun (s:Stock_policy.signal)->Stock_policy.entry_id s=cid) signals
             | Error _->false in

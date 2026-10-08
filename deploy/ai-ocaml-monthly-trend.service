@@ -1,0 +1,23 @@
+[Unit]
+Description=AI OCaml Bot month-end ETF trend (monthly_trend_v1) paper scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=TZ=UTC
+Environment=PAPER_STATE_DIR=/home/ubuntu/jsbot-paper-state
+# SOURCE: observation by default. Orders need --execute plus PAPER_ORDERS=1,
+# STOCK_PAPER_ORDERS=1 and TREND_AUTO_ORDERS=1 (see the -paper.conf drop-in).
+Environment=STOCK_PAPER_ORDERS=0
+Environment=TREND_AUTO_ORDERS=0
+Environment=TREND_SYMBOLS=SPY,QQQ
+EnvironmentFile=/etc/jsbot-paper.env
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/_build/default/bin/monthly_trend_main.exe
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state

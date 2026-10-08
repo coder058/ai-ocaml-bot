@@ -47,6 +47,12 @@ jobs:
           python -m unittest discover -s test -p test_stock_session_opportunities.py -v
           python -m unittest discover -s test -p test_retain_stock_audit.py -v
           python -m unittest discover -s test -p test_score_markov_shadow.py -v
+          python -m unittest discover -s test -p test_monthly_trend_runtime.py -v
+      - name: Offline cost-aware strategy screen
+        run: |
+          python -m pip install -r research/requirements-backtest.txt
+          python -m unittest discover -s test -p test_cost_aware_backtest.py -v
+          python research/cost_aware_backtest.py --folds develop,validate
   monitor:
     runs-on: ubuntu-latest
     defaults:

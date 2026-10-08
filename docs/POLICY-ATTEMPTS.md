@@ -336,3 +336,17 @@ Paper execution is simulated and cannot demonstrate live profitability.
   costs, not a statistical rejection of every future version. Keep this
   configuration frozen while the prospective sample grows; do not search the
   already viewed data for a better cutoff or percentile.
+
+## `monthly_trend_v1` — selected for paper authority (observe until armed)
+
+- **Rule:** hold a liquid ETF when the last completed month's final close is
+  above its 200-session average; otherwise flat. Decide from completed months
+  only and trade at most once per symbol per month.
+- **Selection:** `research/cost_aware_backtest.py`, two develop-only attempts
+  across seven rules, then one validate and one holdout opening. Details,
+  costs and limits are in [the profitability review](PROFITABILITY-REVIEW.md).
+- **Holdout after costs:** S&P 500 2014–18 +6.7%/yr (buy-and-hold +6.3%);
+  NASDAQ +8.7% (+9.7%); US market 2000–18 +8.3% (+5.8%); BTC 2021–24 at
+  27 bps/side +59% (+34%). Max drawdown was lower or equal in every case.
+- **Decision:** implement in OCaml behind the serialized stock router, gated by
+  `TREND_AUTO_ORDERS=1`. Simulated index results are not live profitability.

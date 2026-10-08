@@ -64,3 +64,10 @@
  (libraries paper_market yojson)
  (deps fixtures/alpaca-universe.json)
  (action (run %{test} %{dep:fixtures/alpaca-universe.json})))
+
+(test
+ (name test_monthly_trend)
+ (modules test_monthly_trend)
+ (libraries paper_market yojson)
+ (deps fixtures/spx-trend-parity.json)
+ (action (run %{test} %{dep:fixtures/spx-trend-parity.json})))
