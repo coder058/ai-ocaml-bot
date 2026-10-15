@@ -75,3 +75,33 @@ The report is `research/reports/trend-robustness-20261015.json`. To reproduce:
   it for stock picking.
 - The live one-session delay costs about half a point a year. That is already
   priced in when judging paper results.
+
+## Correction — same day, after code review
+
+The first run measured buy-and-hold from bar 1, but measured the rule only from
+the end of its 200-bar warm-up, so the two covered different periods. GOOG's
+first ~200 sessions after its IPO were a large rally that the rule could not
+yet trade. That inflated buy-and-hold. `trend_robustness.py` now measures both
+from the rule's first held bar. The rule itself and the pass criteria are
+unchanged. The corrected report is
+`research/reports/trend-robustness-20261015-aligned.json`, and the original is
+kept for the record.
+
+| Dataset | Rule CAGR / Sharpe / DD | Buy-and-hold, same period | A | B | C |
+|---|---|---|---|---|---|
+| MSFT | +17.1% / 0.59 / −68% | +23.5% / 0.69 / −72% | ✓ | ✓ | ✓ |
+| GOOG | +11.8% / 0.53 / −31% | +14.1% / 0.51 / −65% | ✓ | ✓ | ✓ |
+| WTI | +5.1% / 0.21 / −62% | +3.6% / 0.20 / −82% | ✓ | ✓ | ✓ |
+
+Execution lag, aligned: median cost 0.46 points per year (pass).
+
+**The earlier conclusion was overstated.** With matched periods, the rule's
+Sharpe was within 0.10 of buy-and-hold or better on all three datasets. It
+earned less raw return on MSFT and GOOG, but with less risk on GOOG. The
+guidance to keep it on index ETFs stands: that is where the selection and
+holdout evidence lives.
+
+The same warm-up mismatch affected only the **develop** fold of
+`cost_aware_backtest.py`. Validate and holdout begin long after every rule is
+warm, so the selection (which compared rules with cash) and the holdout
+tables are unaffected.

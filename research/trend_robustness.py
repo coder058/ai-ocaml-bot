@@ -45,16 +45,26 @@ def lag_datasets() -> list[cab.Dataset]:
     return daily + [ds for ds in fresh_datasets() if ds.name in ("MSFT_daily", "GOOG_daily")]
 
 
-def whole(ds: cab.Dataset, weights: pd.Series, cost: float) -> dict:
-    return cab.evaluate(ds, weights, str(ds.bars.index[0].date()), str(ds.bars.index[-1].date()), cost)
+def whole(ds: cab.Dataset, weights: pd.Series, cost: float, start=None) -> dict:
+    begin = start if start is not None else ds.bars.index[0]
+    return cab.evaluate(ds, weights, str(begin.date()), str(ds.bars.index[-1].date()), cost)
+
+
+def first_held(weights: pd.Series) -> pd.Timestamp:
+    """First bar on which the rule earns a return (after its warm-up)."""
+    return weights.shift(1).first_valid_index()
 
 
 def test_fresh() -> dict:
     rows = []
     for ds in fresh_datasets():
         cost = FRESH_COST_BPS[ds.name]
-        rule = whole(ds, cab.sma_trend_monthly(ds.bars, ds.periods_per_year), cost)
-        hold = whole(ds, cab.buy_and_hold(ds.bars, ds.periods_per_year), cost)
+        weights = cab.sma_trend_monthly(ds.bars, ds.periods_per_year)
+        start = first_held(weights)
+        rule = whole(ds, weights, cost, start)
+        # Bug fix (15 Oct, after the first run): buy-and-hold is now measured
+        # over the same period as the rule, excluding the rule's warm-up.
+        hold = whole(ds, cab.buy_and_hold(ds.bars, ds.periods_per_year), cost, start)
         a = rule["net_cagr"] > 0
         b = rule["max_drawdown"] > hold["max_drawdown"]
         c = rule["sharpe"] >= hold["sharpe"] - 0.10
@@ -70,9 +80,11 @@ def test_lag() -> dict:
     rows = []
     for ds in lag_datasets():
         weights = cab.sma_trend_monthly(ds.bars, ds.periods_per_year)
-        same = whole(ds, weights, 2.0)
+        # Both variants are measured from the delayed rule's first held bar.
+        start = first_held(weights.shift(1))
+        same = whole(ds, weights, 2.0, start)
         # One extra session: decided at the month-end close, held from the next close.
-        late = whole(ds, weights.shift(1), 2.0)
+        late = whole(ds, weights.shift(1), 2.0, start)
         rows.append({"dataset": ds.name, "same_close_cagr": same["net_cagr"], "next_session_cagr": late["net_cagr"],
                      "reduction": same["net_cagr"] - late["net_cagr"]})
     median = float(pd.Series([r["reduction"] for r in rows]).median())

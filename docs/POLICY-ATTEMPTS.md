@@ -367,5 +367,6 @@ Paper execution is simulated and cannot demonstrate live profitability.
 The unchanged rule passed both pre-registered tests in
 [TREND-ROBUSTNESS](TREND-ROBUSTNESS.md): it was profitable with a smaller
 drawdown on unseen MSFT, GOOG and WTI data, and the next-session lag cost 0.45
-points a year. It trails buy-and-hold on single stocks in bull runs, so it
-stays limited to index ETFs.
+points a year (0.46 after the same-period correction in that document). It
+earned less raw return than buy-and-hold on single stocks, so it stays limited
+to index ETFs.

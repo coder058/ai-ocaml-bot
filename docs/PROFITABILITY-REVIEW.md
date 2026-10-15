@@ -201,11 +201,14 @@ commit `39e5df5`):
 
 - **Unseen data:** the unchanged rule was profitable on MSFT 1986–2017
   (+17.1%/yr), GOOG 2004–13 (+11.8%) and WTI oil 1986–2019 (+5.1%), with a
-  smaller drawdown than buy-and-hold every time.
-- **Single stocks:** in long bull runs it trailed buy-and-hold by a lot. Use it
-  on broad index ETFs only.
+  smaller drawdown than buy-and-hold every time. Its Sharpe was within 0.10 of
+  buy-and-hold or better on all three. These are the figures after a
+  same-period correction found in code review; see
+  [TREND-ROBUSTNESS](TREND-ROBUSTNESS.md#correction--same-day-after-code-review).
+- **Single stocks:** it earned less raw return than buy-and-hold on MSFT and
+  GOOG. Keep it on index ETFs, where the selection evidence lives.
 - **Execution lag:** trading one session after the month-end decision, as the
-  live scheduler does, costs a median 0.45 points a year.
+  live scheduler does, costs a median 0.46 points a year.
 
 **BTC is now wired.** `crypto_monthly_trend_v1` (`bin/crypto_trend_main.ml`)
 holds BTC/USD when the last month-end close is above the mean of ten month-end
