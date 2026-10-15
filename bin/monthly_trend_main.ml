@@ -27,7 +27,9 @@ let orders ()=let file=path "stock-paper-ledger.json" in
 let owned ticker rows=List.fold_left (fun total row->
   if text "symbol" row<>ticker then total else match field "broker" row with
     | Some broker -> let qty=unwrap (Exact_decimal.of_string (text "filled_qty" broker)) in
-      if text "side" row="buy" then Int64.add total qty
+      if text "side" row="buy" then (
+        if total>Int64.sub Int64.max_int qty then failwith "stock ownership overflow";
+        Int64.add total qty)
       else if qty>total then failwith "stock exit exceeds ownership" else Int64.sub total qty
     | None->total) Exact_decimal.zero rows
 let pending ticker rows=List.exists (fun row->text "symbol" row=ticker && text "state" row="pending") rows
@@ -54,7 +56,7 @@ let daily_bars ~today tickers =
     if count>20 then failwith "daily bar pagination did not terminate";
     let url="https://data.alpaca.markets/v2/stocks/bars?timeframe=1Day&adjustment=all&feed=iex&limit=10000&start="
       ^ start ^ "&symbols=" ^ String.concat "%2C" tickers
-      ^ (match token with Some t->"&page_token=" ^ t | None->"") in
+      ^ (match token with Some t->"&page_token=" ^ Alpaca_http.query_escape t | None->"") in
     let doc=unwrap (Alpaca_http.get_json ~url ~key_id ~secret) in
     (match field "bars" doc with
      | Some (`Assoc rows)->List.iter (fun (symbol,bars)->match bars with
@@ -106,15 +108,16 @@ let run ()=
       let base=["reading",Monthly_trend.reading_to_json reading;"ownedQuantity",`String (Exact_decimal.to_string qty)] in
       let intent side cid extra=`Assoc (["symbol",`String ticker;"side",`String side;"clientOrderId",`String cid;
         "policy",`String Monthly_trend.policy;"bars",Monthly_trend.bars_to_json history]@extra) in
-      (* Retry only attempts that never filled; a filled order this month ends
-         that side for the month. *)
+      (* Entries retry only attempts that never filled; a filled entry ends that
+         month's buying. Exits are only requested while shares remain, so a
+         partly filled exit may use the remaining attempts. *)
       let next_attempt ~month ~side ~origin=
         let cids=List.init Monthly_trend.max_attempts (fun attempt->
           attempt,Monthly_trend.client_id ~attempt ~symbol:ticker ~month ~side ~origin ()) in
         let used=List.filter (fun row->List.exists (fun (_,cid)->text "clientOrderId" row=cid) cids) !rows in
         let filled row=match Option.bind (field "broker" row) (fun b->Paper_broker.float (field "filled_qty" b)) with
           | Some q->q>0. | None->false in
-        if List.exists filled used then None
+        if side="buy" && List.exists filled used then None
         else List.find_opt (fun (_,cid)->not (List.exists (fun row->text "clientOrderId" row=cid) used)) cids in
       if pending ticker !rows then note ticker "abstain" (("reason",`String "Pending order must reconcile first")::base)
       else match reading.decision with
@@ -168,4 +171,9 @@ let run ()=
 let ()=
   let fd=Unix.openfile (path "monthly-trend.lock") [Unix.O_CREAT;Unix.O_WRONLY] 0o640 in
   Fun.protect ~finally:(fun ()->Unix.close fd) (fun ()->try Unix.lockf fd Unix.F_TLOCK 0;run ()
-    with error->prerr_endline ("monthly trend: " ^ Printexc.to_string error);exit 1)
+    with error->
+      prerr_endline ("monthly trend: " ^ Printexc.to_string error);
+      (* Replace the previous status so a failed run is visible, not stale. *)
+      (try atomic (path "monthly-trend.json") (`Assoc ["asOf",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
+        "mode",`String "ERROR";"error",`String (Printexc.to_string error)]) with _->());
+      exit 1)

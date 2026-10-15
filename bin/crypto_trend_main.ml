@@ -69,7 +69,10 @@ let run ()=
   List.iter (fun row->
     if not (String.starts_with ~prefix:Crypto_trend_broker.prefix (text "clientOrderId" row)) ||
        not (List.mem (text "side" row) ["buy";"sell"]) ||
-       not (List.mem (text "state" row) ["pending";"resolved";"rejected"]) then
+       not (List.mem (text "state" row) ["pending";"resolved";"rejected"]) ||
+       (match field "request" row with
+        | Some request->Result.is_error (Exact_decimal.of_string (text "qty" request))
+        | None->true) then
       failwith "invalid crypto trend ledger row";
     Option.iter (validate_broker row) (field "broker" row)) !rows;
   (* Reconcile every pending request before any decision. *)
@@ -188,4 +191,9 @@ let ()=
   Fun.protect ~finally:(fun ()->Unix.close fd) (fun ()->
     try Unix.lockf fd Unix.F_TLOCK 0;
       Execution_proof.Portfolio_cycle.run ~state_dir run
-    with error->prerr_endline ("crypto trend: " ^ Printexc.to_string error);exit 1)
+    with error->
+      prerr_endline ("crypto trend: " ^ Printexc.to_string error);
+      (* Replace the previous status so a failed run is visible, not stale. *)
+      (try atomic (path "crypto-trend.json") (`Assoc ["asOf",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
+        "mode",`String "ERROR";"error",`String (Printexc.to_string error)]) with _->());
+      exit 1)

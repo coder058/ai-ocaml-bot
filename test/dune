@@ -76,3 +76,8 @@
  (name test_loss_guard)
  (modules test_loss_guard)
  (libraries paper_market unix))
+
+(test
+ (name test_alpaca_query_escape)
+ (modules test_alpaca_query_escape)
+ (libraries paper_market))

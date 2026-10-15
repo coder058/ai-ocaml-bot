@@ -29,3 +29,5 @@ val post_json :
   secret:string ->
   body:string ->
   (Yojson.Safe.t, string) result
+
+val query_escape : string -> string

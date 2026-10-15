@@ -132,6 +132,20 @@ class CryptoTrendRuntime(unittest.TestCase):
             self.assertEqual(self.run_trend(root, extra={'CRYPTO_TREND_ENTRY_USD': '300'})['entryUsd'], 300.0)
             self.assertEqual(self.posts(root)[0]['qty'], '0.005000000')
 
+    def test_bar_outage_abstains_and_quote_outage_reports_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory, 'up')
+            (root/'curl').write_text(FAKE.replace("finish({'bars':{'BTC/USD':d['bars']},'next_page_token':None})",
+                                                  "finish({'message':'synthetic outage'},503)"))
+            self.assertEqual(self.status(self.run_trend(root)), 'abstain')
+            (root/'curl').write_text(FAKE.replace("p=d.get('price',60000);finish(",
+                                                  "finish({'message':'synthetic outage'},503);finish("))
+            self.run_trend(root, ok=False)
+            status = json.loads((root/'crypto-trend.json').read_text())
+            self.assertEqual(status['mode'], 'ERROR')
+            self.assertIn('HTTP 503', status['error'])
+            self.assertEqual(self.posts(root), [])
+
     def test_observe_mode_never_posts(self):
         with tempfile.TemporaryDirectory() as directory:
             root = self.fixture(directory, 'up')

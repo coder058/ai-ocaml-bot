@@ -45,7 +45,7 @@ let daily_bars ~start =
     let rec page token count acc =
       if count > 20 then Error "crypto bar pagination did not terminate" else
       let url = "https://data.alpaca.markets/v1beta3/crypto/us/bars?symbols=BTC%2FUSD&timeframe=1Day&limit=10000&start="
-        ^ start ^ (match token with Some t -> "&page_token=" ^ t | None -> "") in
+        ^ start ^ (match token with Some t -> "&page_token=" ^ Alpaca_http.query_escape t | None -> "") in
       match Alpaca_http.get_json ~url ~key_id ~secret with
       | Error _ as error -> error
       | Ok doc ->

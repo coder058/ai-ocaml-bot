@@ -188,3 +188,12 @@ let post_json ~url ~key_id ~secret ~body : (Yojson.Safe.t, string) result =
       else
         (try Ok (Yojson.Safe.from_string resp)
          with Yojson.Json_error msg -> Error ("JSON parse: " ^ msg))
+
+(* Percent-encode a query value (RFC 3986 unreserved characters pass through).
+   Alpaca page tokens are base64-like and may contain '+', '/' or '='. *)
+let query_escape value =
+  let buffer = Buffer.create (String.length value * 3) in
+  String.iter (fun c -> match c with
+    | 'A'..'Z' | 'a'..'z' | '0'..'9' | '-' | '_' | '.' | '~' -> Buffer.add_char buffer c
+    | c -> Buffer.add_string buffer (Printf.sprintf "%%%02X" (Char.code c))) value;
+  Buffer.contents buffer

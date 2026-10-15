@@ -105,6 +105,18 @@ class MonthlyTrendRuntime(unittest.TestCase):
             self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'buy_routed')
             self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'hold')
 
+    def test_partly_filled_exit_retries_within_month(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory, 'up')
+            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'buy_routed')
+            p = root/'broker.json'; d = json.loads(p.read_text()); d['fraction'] = '0.4'; d['bars'] = closes('down')
+            p.write_text(json.dumps(d))
+            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'sell_routed')
+            d = json.loads(p.read_text()); d.pop('fraction'); p.write_text(json.dumps(d))
+            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'sell_routed')
+            self.assertEqual([x['qty'] for x in self.posts(root)[1:]], ['1.000000000', '0.600000000'])
+            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'flat')
+
     def test_configured_entry_size_within_cap(self):
         with tempfile.TemporaryDirectory() as directory:
             root = self.fixture(directory, 'up')

@@ -39,6 +39,9 @@ let day_number (y, m, d) =
   let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy in
   era * 146097 + doe - 719468
 
+(* Last [n] elements, computing the length once. *)
+let last n items = let drop = List.length items - n in List.filteri (fun i _ -> i >= drop) items
+
 let month_key (y, m, _) = Printf.sprintf "%04d-%02d" y m
 let previous_month (y, m, _) = if m = 1 then (y - 1, 12, 1) else (y, m - 1, 1)
 
@@ -59,7 +62,7 @@ let decide ~today bars =
   | Ok parsed ->
       let current = month_key today in
       let completed = List.filter (fun (date, _) -> month_key date < current) parsed in
-      let window = List.filteri (fun i _ -> i >= List.length completed - lookback) completed in
+      let window = last lookback completed in
       match List.rev window with
       | [] -> Error "no completed-month daily bars"
       | (last_date, (last : bar)) :: _ ->
@@ -95,7 +98,7 @@ let decide_monthly ~today bars =
     let closes = List.rev (List.fold_left (fun acc ((y, m, d), bar) -> match acc with
       | ((key, _, _) :: rest) when key = month_key (y, m, d) -> (key, (y, m, d), bar) :: rest
       | _ -> (month_key (y, m, d), (y, m, d), bar) :: acc) [] completed) in
-    let window = List.filteri (fun i _ -> i >= List.length closes - months) closes in
+    let window = last months closes in
     let rec consecutive = function
       | (_, a, _) :: ((_, b, _) :: _ as rest) ->
         let (ay, am, _) = a and (by, bm, _) = b in
