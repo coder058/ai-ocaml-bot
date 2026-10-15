@@ -87,6 +87,24 @@ class MonthlyTrendRuntime(unittest.TestCase):
             decisions = [e for e in events if e['kind'] == 'DECISION']
             self.assertEqual([e['detail']['reading']['decision'] for e in decisions], ['hold', 'flat'])
 
+    def test_rejected_entry_retries_within_monthly_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory, 'up')
+            p = root/'broker.json'; d = json.loads(p.read_text()); d['reject'] = True; p.write_text(json.dumps(d))
+            for _ in range(3):
+                self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'buy_rejected')
+            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'abstain')
+            self.assertEqual(len({p['client_order_id'] for p in self.posts(root)}), 3)
+
+    def test_rejection_then_success_uses_next_attempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory, 'up')
+            p = root/'broker.json'; d = json.loads(p.read_text()); d['reject'] = True; p.write_text(json.dumps(d))
+            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'buy_rejected')
+            d = json.loads(p.read_text()); d['reject'] = False; p.write_text(json.dumps(d))
+            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'buy_routed')
+            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'hold')
+
     def test_configured_entry_size_within_cap(self):
         with tempfile.TemporaryDirectory() as directory:
             root = self.fixture(directory, 'up')

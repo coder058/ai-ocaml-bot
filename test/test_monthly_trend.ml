@@ -43,7 +43,7 @@ let ()=
   expect_error "missing month end accepted" (List.filteri (fun i _->i<297) up);
   (* Intent verification recomputes the decision and binds the month. *)
   let reading=Result.get_ok (Monthly_trend.decide ~today up) in
-  let cid=Monthly_trend.client_id ~symbol:"SPY" ~month:reading.month ~side:"buy" ~origin:"" in
+  let cid=Monthly_trend.client_id ~symbol:"SPY" ~month:reading.month ~side:"buy" ~origin:"" () in
   let intent side cid bars=`Assoc ["policy",`String Monthly_trend.policy;"symbol",`String "SPY";
     "side",`String side;"clientOrderId",`String cid;"bars",Monthly_trend.bars_to_json bars] in
   if Result.is_error (Monthly_trend.verify_intent ~today ~symbol:"SPY" ~side:"buy" ~client_id:cid (intent "buy" cid up)) then
@@ -54,10 +54,20 @@ let ()=
     fail "previous month's intent accepted in a new month";
   if Result.is_ok (Monthly_trend.verify_intent ~today ~symbol:"QQQ" ~side:"buy" ~client_id:cid (intent "buy" cid up)) then
     fail "intent symbol mismatch accepted";
-  let exit_cid=Monthly_trend.client_id ~symbol:"SPY" ~month:"2025-10" ~side:"sell" ~origin:cid in
+  let exit_cid=Monthly_trend.client_id ~symbol:"SPY" ~month:"2025-10" ~side:"sell" ~origin:cid () in
   let exit_intent=match intent "sell" exit_cid down with `Assoc f->`Assoc (("originEntryId",`String cid)::f) | j->j in
   if Result.is_error (Monthly_trend.verify_intent ~today ~symbol:"SPY" ~side:"sell" ~client_id:exit_cid exit_intent) then
     fail "valid trend exit rejected";
+  let retry=Monthly_trend.client_id ~attempt:1 ~symbol:"SPY" ~month:reading.month ~side:"buy" ~origin:"" () in
+  let with_attempt n j=match j with `Assoc f->`Assoc (("attempt",`Int n)::f) | j->j in
+  if retry=cid then fail "retry identity equals first attempt";
+  if Result.is_error (Monthly_trend.verify_intent ~today ~symbol:"SPY" ~side:"buy" ~client_id:retry (with_attempt 1 (intent "buy" retry up))) then
+    fail "valid retry intent rejected";
+  if Result.is_ok (Monthly_trend.verify_intent ~today ~symbol:"SPY" ~side:"buy" ~client_id:retry (with_attempt 2 (intent "buy" retry up))) then
+    fail "retry intent with a mismatched attempt accepted";
+  let fourth=Monthly_trend.client_id ~attempt:3 ~symbol:"SPY" ~month:reading.month ~side:"buy" ~origin:"" () in
+  if Result.is_ok (Monthly_trend.verify_intent ~today ~symbol:"SPY" ~side:"buy" ~client_id:fourth (with_attempt 3 (intent "buy" fourth up))) then
+    fail "attempt beyond the monthly limit accepted";
   if String.length cid<>40 || not (String.starts_with ~prefix:"aibotstk" cid) then fail "client ID outside router namespace";
   (* BTC ten-month variant: parity on 144 real monthly closes 2013-2024. *)
   let btc=Yojson.Safe.from_file Sys.argv.(2) in

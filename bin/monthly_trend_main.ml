@@ -93,7 +93,9 @@ let run ()=
       "--client-id";cid;"--reason";"Month-end close vs 200-session average (monthly_trend_v1)";
       "--evidence-file";intent;"--execute"] in
     incr invoked;rows:=orders ();
-    ok in
+    (* The router exits successfully after durably recording a broker
+       rejection, so the ledger, not the exit code, says what happened. *)
+    ok && not (List.exists (fun row->text "clientOrderId" row=cid && text "state" row="rejected") !rows) in
   List.iter (fun ticker->
     let history=bars ticker in
     match Monthly_trend.decide ~today history with
@@ -104,16 +106,26 @@ let run ()=
       let base=["reading",Monthly_trend.reading_to_json reading;"ownedQuantity",`String (Exact_decimal.to_string qty)] in
       let intent side cid extra=`Assoc (["symbol",`String ticker;"side",`String side;"clientOrderId",`String cid;
         "policy",`String Monthly_trend.policy;"bars",Monthly_trend.bars_to_json history]@extra) in
+      (* Retry only attempts that never filled; a filled order this month ends
+         that side for the month. *)
+      let next_attempt ~month ~side ~origin=
+        let cids=List.init Monthly_trend.max_attempts (fun attempt->
+          attempt,Monthly_trend.client_id ~attempt ~symbol:ticker ~month ~side ~origin ()) in
+        let used=List.filter (fun row->List.exists (fun (_,cid)->text "clientOrderId" row=cid) cids) !rows in
+        let filled row=match Option.bind (field "broker" row) (fun b->Paper_broker.float (field "filled_qty" b)) with
+          | Some q->q>0. | None->false in
+        if List.exists filled used then None
+        else List.find_opt (fun (_,cid)->not (List.exists (fun row->text "clientOrderId" row=cid) used)) cids in
       if pending ticker !rows then note ticker "abstain" (("reason",`String "Pending order must reconcile first")::base)
       else match reading.decision with
       | Monthly_trend.Hold when qty=Exact_decimal.zero ->
-        let cid=Monthly_trend.client_id ~symbol:ticker ~month:reading.month ~side:"buy" ~origin:"" in
-        if List.exists (fun row->text "clientOrderId" row=cid) !rows then
-          note ticker "abstain" (("reason",`String "This month's entry was already attempted")::base)
-        else if not (armed && session) then
-          note ticker "would_buy" (("reason",`String (if armed then "Regular session closed" else "Observe mode"))::base)
-        else note ticker (if transmit ticker "buy" (Exact_decimal.to_string (unwrap (Exact_decimal.of_float entry_usd)))
-                              cid (intent "buy" cid []) then "buy_routed" else "buy_rejected") base
+        (match next_attempt ~month:reading.month ~side:"buy" ~origin:"" with
+         | None->note ticker "abstain" (("reason",`String "This month's entry attempts are exhausted")::base)
+         | Some (attempt,cid)->
+           if not (armed && session) then
+             note ticker "would_buy" (("reason",`String (if armed then "Regular session closed" else "Observe mode"))::base)
+           else note ticker (if transmit ticker "buy" (Exact_decimal.to_string (unwrap (Exact_decimal.of_float entry_usd)))
+                                 cid (intent "buy" cid ["attempt",`Int attempt]) then "buy_routed" else "buy_rejected") base)
       | Monthly_trend.Hold when Option.fold ~none:false ~some:trend_owned entry -> note ticker "hold" base
       | Monthly_trend.Hold -> note ticker "abstain" (("reason",`String "Owned shares belong to another policy or manual entry")::base)
       | Monthly_trend.Flat when qty=Exact_decimal.zero -> note ticker "flat" base
@@ -121,13 +133,13 @@ let run ()=
         (match entry with
          | Some entry when trend_owned entry ->
            let origin=text "clientOrderId" entry in
-           let cid=Monthly_trend.client_id ~symbol:ticker ~month:reading.month ~side:"sell" ~origin in
-           if List.exists (fun row->text "clientOrderId" row=cid) !rows then
-             note ticker "abstain" (("reason",`String "This month's exit was already attempted")::base)
-           else if not (armed && session) then
-             note ticker "would_sell" (("reason",`String (if armed then "Regular session closed" else "Observe mode"))::base)
-           else note ticker (if transmit ticker "sell" (Exact_decimal.to_string qty) cid
-                                 (intent "sell" cid ["originEntryId",`String origin]) then "sell_routed" else "sell_rejected") base
+           (match next_attempt ~month:reading.month ~side:"sell" ~origin with
+            | None->note ticker "abstain" (("reason",`String "This month's exit attempts are exhausted")::base)
+            | Some (attempt,cid)->
+              if not (armed && session) then
+                note ticker "would_sell" (("reason",`String (if armed then "Regular session closed" else "Observe mode"))::base)
+              else note ticker (if transmit ticker "sell" (Exact_decimal.to_string qty) cid
+                                    (intent "sell" cid ["originEntryId",`String origin;"attempt",`Int attempt]) then "sell_routed" else "sell_rejected") base)
          | _->note ticker "abstain" (("reason",`String "Owned shares belong to another policy or manual entry")::base))
   ) symbols;
   (* Paper P&L for this policy's own fills only: fill cash flow plus owned

@@ -124,8 +124,13 @@ let entry_usd variable =
         && Float.round (value *. 100.) = value *. 100. -> Ok value
     | _ -> Error (variable ^ " must be whole cents between 10 and 500 USD")
 
-let client_id ~symbol ~month ~side ~origin =
-  Stock_policy.client_id [symbol; month; side; origin; policy]
+(* SOURCE: up to three requests per side per decision month, so a rejected or
+   never-accepted order does not forfeit a whole month. UNCALIBRATED GUESS.
+   Attempt 0 keeps the original identity derivation. *)
+let max_attempts = 3
+let client_id ?(attempt=0) ~symbol ~month ~side ~origin () =
+  Stock_policy.client_id ([symbol; month; side; origin; policy] @
+    (if attempt = 0 then [] else [string_of_int attempt]))
 
 let bars_to_json bars = `List (List.map (fun bar -> `List [`String bar.date; `Float bar.close]) bars)
 let bars_of_json = function
@@ -152,9 +157,12 @@ let verify_intent ~today ~symbol ~side ~client_id:cid evidence =
     Result.bind (bars_of_json (Option.value ~default:`Null (Paper_broker.member "bars" evidence))) (fun bars ->
       Result.bind (decide ~today bars) (fun reading ->
         let origin = Option.value ~default:"" (text "originEntryId") in
+        let attempt = match Paper_broker.member "attempt" evidence with
+          | None -> Some 0 | Some (`Int n) when n >= 0 && n < max_attempts -> Some n | _ -> None in
         if side = "buy" && reading.decision <> Hold then Error "trend rule no longer holds this ETF"
         else if side = "sell" && reading.decision <> Flat then Error "trend rule no longer exits this ETF"
         else if side <> "buy" && side <> "sell" then Error "invalid trend side"
-        else if client_id ~symbol ~month:reading.month ~side ~origin <> cid then
+        else if attempt = None then Error "trend intent attempt is outside the monthly limit"
+        else if client_id ~attempt:(Option.get attempt) ~symbol ~month:reading.month ~side ~origin () <> cid then
           Error "trend client ID does not match the decision month"
         else Ok reading))
