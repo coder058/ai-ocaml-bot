@@ -42,3 +42,36 @@ point per year.
 
 If either test fails, the rule stays in observe mode and the failure is
 reported. The rule is not tuned on these datasets.
+
+## Results — run 15 October 2026, after the pre-registration commit `39e5df5`
+
+The report is `research/reports/trend-robustness-20261015.json`. To reproduce:
+`cd research && python trend_robustness.py`.
+
+### Test 1: PASS (3 of 3 datasets meet A and B; worst net CAGR +5.1%)
+
+| Dataset | Rule net CAGR | Sharpe | Max DD | Buy-and-hold CAGR | Sharpe | Max DD | A | B | C |
+|---|---|---|---|---|---|---|---|---|---|
+| MSFT 1986–2017 | +17.1% | 0.59 | −68% | +24.8% | 0.70 | −72% | ✓ | ✓ | ✗ |
+| GOOG 2004–2013 | +11.8% | 0.53 | −31% | +27.7% | 0.83 | −65% | ✓ | ✓ | ✗ |
+| WTI spot 1986–2019 | +5.1% | 0.21 | −62% | +1.9% | 0.17 | −82% | ✓ | ✓ | ✓ |
+
+### Test 2: PASS (median lag cost 0.45 pp/yr ≤ 1.0)
+
+| Dataset | Same-close CAGR | Next-session CAGR | Cost of lag |
+|---|---|---|---|
+| SPX | +7.80% | +7.32% | 0.48 pp |
+| NASDAQ | +7.17% | +6.76% | 0.41 pp |
+| MSFT | +17.10% | +17.57% | −0.47 pp |
+| GOOG | +11.82% | +10.18% | 1.64 pp |
+
+### What this changes
+
+- The rule made money on all three unseen datasets and cut drawdowns every
+  time. It is a crash-avoidance rule, not a return booster.
+- On single stocks in long bull runs it trails buy-and-hold by a lot
+  (C failed on MSFT and GOOG). Keep `TREND_SYMBOLS` to broad index ETFs
+  (SPY, QQQ), where it matched or beat buy-and-hold in the holdout. Do not use
+  it for stock picking.
+- The live one-session delay costs about half a point a year. That is already
+  priced in when judging paper results.

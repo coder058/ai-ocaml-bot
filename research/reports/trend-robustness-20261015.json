@@ -1,0 +1,140 @@
+{
+  "preRegistration": "docs/TREND-ROBUSTNESS.md",
+  "fresh": {
+    "rows": [
+      {
+        "dataset": "MSFT_daily",
+        "cost_bps_per_side": 2.0,
+        "rule": {
+          "bars": 7779,
+          "years": 30.87,
+          "net_cagr": 0.17104718581555578,
+          "gross_cagr": 0.17152554636367334,
+          "cash_cagr": 0.03161454865777702,
+          "excess_cagr_vs_cash": 0.13943263715777876,
+          "sharpe": 0.5909786285918671,
+          "max_drawdown": -0.6812157522108819,
+          "turnover_per_year": 2.040879290397223,
+          "cost_drag_per_year": 0.0004081758580794446,
+          "time_invested": 0.7080601619745469
+        },
+        "buy_and_hold": {
+          "bars": 7982,
+          "years": 31.67,
+          "net_cagr": 0.24790864470492147,
+          "gross_cagr": 0.24791652507132067,
+          "cash_cagr": 0.032377625836919055,
+          "excess_cagr_vs_cash": 0.2155310188680024,
+          "sharpe": 0.7043109186499044,
+          "max_drawdown": -0.7164948453608233,
+          "turnover_per_year": 0.03157103482836382,
+          "cost_drag_per_year": 6.314206965672764e-06,
+          "time_invested": 1.0
+        },
+        "A_positive": true,
+        "B_smaller_drawdown": true,
+        "C_sharpe_within_0.10": false
+      },
+      {
+        "dataset": "GOOG_daily",
+        "cost_bps_per_side": 2.0,
+        "rule": {
+          "bars": 1929,
+          "years": 7.65,
+          "net_cagr": 0.11819037639873198,
+          "gross_cagr": 0.11868706767747383,
+          "cash_cagr": 0.01696709228773785,
+          "excess_cagr_vs_cash": 0.10122328411099413,
+          "sharpe": 0.5299518978247588,
+          "max_drawdown": -0.31087534882653023,
+          "turnover_per_year": 2.2208398133748055,
+          "cost_drag_per_year": 0.00044416796267496115,
+          "time_invested": 0.6941420425090721
+        },
+        "buy_and_hold": {
+          "bars": 2147,
+          "years": 8.52,
+          "net_cagr": 0.27705289007554756,
+          "gross_cagr": 0.2770806653191571,
+          "cash_cagr": 0.017423430213866276,
+          "excess_cagr_vs_cash": 0.2596294598616813,
+          "sharpe": 0.8312682547781187,
+          "max_drawdown": -0.6529475997249894,
+          "turnover_per_year": 0.11737307871448532,
+          "cost_drag_per_year": 2.3474615742897065e-05,
+          "time_invested": 1.0
+        },
+        "A_positive": true,
+        "B_smaller_drawdown": true,
+        "C_sharpe_within_0.10": false
+      },
+      {
+        "dataset": "WTI_spot_daily",
+        "cost_bps_per_side": 5.0,
+        "rule": {
+          "bars": 8110,
+          "years": 32.18,
+          "net_cagr": 0.05060606295105474,
+          "gross_cagr": 0.051583066288275914,
+          "cash_cagr": 0.03112795375240629,
+          "excess_cagr_vs_cash": 0.019478109198648452,
+          "sharpe": 0.20807862229900345,
+          "max_drawdown": -0.6157570396318719,
+          "turnover_per_year": 1.8643649815043155,
+          "cost_drag_per_year": 0.0009321824907521578,
+          "time_invested": 0.581750924784217
+        },
+        "buy_and_hold": {
+          "bars": 8320,
+          "years": 33.02,
+          "net_cagr": 0.018552789732805053,
+          "gross_cagr": 0.01856795773052511,
+          "cash_cagr": 0.031918245565921044,
+          "excess_cagr_vs_cash": -0.013365455833115991,
+          "sharpe": 0.166145136608001,
+          "max_drawdown": -0.8197646411121056,
+          "turnover_per_year": 0.030288461538461535,
+          "cost_drag_per_year": 1.5144230769230767e-05,
+          "time_invested": 1.0
+        },
+        "A_positive": true,
+        "B_smaller_drawdown": true,
+        "C_sharpe_within_0.10": true
+      }
+    ],
+    "datasets_meeting_A_and_B": 3,
+    "worst_net_cagr": 0.05060606295105474,
+    "pass": true
+  },
+  "lag": {
+    "rows": [
+      {
+        "dataset": "SPX_daily",
+        "same_close_cagr": 0.07800367430864719,
+        "next_session_cagr": 0.07320983418330318,
+        "reduction": 0.004793840125344007
+      },
+      {
+        "dataset": "NASDAQ_daily",
+        "same_close_cagr": 0.0717131830981026,
+        "next_session_cagr": 0.06759020463834209,
+        "reduction": 0.004122978459760507
+      },
+      {
+        "dataset": "MSFT_daily",
+        "same_close_cagr": 0.17104718581555578,
+        "next_session_cagr": 0.17570894569357964,
+        "reduction": -0.004661759878023863
+      },
+      {
+        "dataset": "GOOG_daily",
+        "same_close_cagr": 0.11819037639873198,
+        "next_session_cagr": 0.10180992946812006,
+        "reduction": 0.016380446930611914
+      }
+    ],
+    "median_reduction": 0.004458409292552257,
+    "pass": true
+  },
+  "limits": "Simulated, pre-tax; WTI spot is not directly tradable. Not live profitability."
+}
