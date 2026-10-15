@@ -53,11 +53,11 @@ class MonthlyTrendRuntime(unittest.TestCase):
                 'PAPER_ORDERS': '1', 'STOCK_PAPER_ORDERS': '1', 'TREND_SYMBOLS': 'QQQ',
                 'TREND_AUTO_ORDERS': '1' if armed else '0'}
 
-    def run_trend(self, root, armed=True):
-        result = subprocess.run([str(ENGINE), '--execute'], env=self.env(root, armed),
+    def run_trend(self, root, armed=True, extra=None, ok=True):
+        result = subprocess.run([str(ENGINE), '--execute'], env={**self.env(root, armed), **(extra or {})},
                                 capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return json.loads((root/'monthly-trend.json').read_text())
+        self.assertEqual(result.returncode == 0, ok, result.stderr)
+        return json.loads((root/'monthly-trend.json').read_text()) if ok else result
 
     posts = stock_runtime.StockRuntime.posts
 
@@ -87,13 +87,22 @@ class MonthlyTrendRuntime(unittest.TestCase):
             decisions = [e for e in events if e['kind'] == 'DECISION']
             self.assertEqual([e['detail']['reading']['decision'] for e in decisions], ['hold', 'flat'])
 
+    def test_configured_entry_size_within_cap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory, 'up')
+            self.run_trend(root, extra={'TREND_ENTRY_USD': '600'}, ok=False)
+            self.assertEqual(self.posts(root), [])
+            report = self.run_trend(root, extra={'TREND_ENTRY_USD': '250'})
+            self.assertEqual(report['entryUsd'], 250.0)
+            self.assertEqual(self.posts(root)[0]['notional'], '250.000000000')
+
     def test_observe_mode_never_posts(self):
         with tempfile.TemporaryDirectory() as directory:
             root = self.fixture(directory, 'up')
             self.assertEqual(self.run_trend(root, armed=False)['symbols'][0]['status'], 'would_buy')
             self.assertEqual(self.posts(root), [])
 
-    def route(self, root, direction, gate='1'):
+    def route(self, root, direction, gate='1', extra=None):
         bars = [[b['t'][:10], b['c']] for b in closes(direction)]
         # Same derivation as Stock_policy.client_id [symbol; month; side; origin; policy].
         cid = 'aibotstk' + hashlib.md5(f"QQQ|{bars[-1][0][:7]}|buy||monthly_trend_v1".encode()).hexdigest()
@@ -101,7 +110,7 @@ class MonthlyTrendRuntime(unittest.TestCase):
         (root/'intent.json').write_text(json.dumps(intent))
         return subprocess.run([str(ROUTER), '--buy', 'QQQ', '--amount', '100', '--client-id', cid,
                                '--evidence-file', str(root/'intent.json'), '--execute'],
-                              env={**self.env(root), 'TREND_AUTO_ORDERS': gate}, capture_output=True, text=True, timeout=30)
+                              env={**self.env(root), 'TREND_AUTO_ORDERS': gate, **(extra or {})}, capture_output=True, text=True, timeout=30)
 
     def test_router_recomputes_the_rule_from_intent_bars(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -112,6 +121,13 @@ class MonthlyTrendRuntime(unittest.TestCase):
             self.assertEqual(self.posts(root), [])
             self.assertEqual(self.route(root, 'up').returncode, 0)
             self.assertEqual([p['side'] for p in self.posts(root)], ['buy'])
+
+    def test_router_rejects_amount_other_than_configured_size(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory)
+            result = self.route(root, 'up', extra={'TREND_ENTRY_USD': '200'})
+            self.assertIn('configured TREND_ENTRY_USD', result.stderr)
+            self.assertEqual(self.posts(root), [])
 
     def test_router_requires_trend_gate(self):
         with tempfile.TemporaryDirectory() as directory:

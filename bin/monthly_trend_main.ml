@@ -75,6 +75,7 @@ let daily_bars ~today tickers =
   fun symbol->List.rev (Option.value ~default:[] (Hashtbl.find_opt table symbol))
 let run ()=
   if not (router ["--check"]) then failwith "stock reconciliation/preflight health check failed";
+  let entry_usd=unwrap (Monthly_trend.entry_usd "TREND_ENTRY_USD") in
   let now=Unix.gettimeofday () in
   let t=Unix.gmtime now in
   let today=(t.tm_year+1900,t.tm_mon+1,t.tm_mday) in
@@ -111,7 +112,7 @@ let run ()=
           note ticker "abstain" (("reason",`String "This month's entry was already attempted")::base)
         else if not (armed && session) then
           note ticker "would_buy" (("reason",`String (if armed then "Regular session closed" else "Observe mode"))::base)
-        else note ticker (if transmit ticker "buy" (Exact_decimal.to_string (unwrap (Exact_decimal.of_float Multi_paper.entry_usd)))
+        else note ticker (if transmit ticker "buy" (Exact_decimal.to_string (unwrap (Exact_decimal.of_float entry_usd)))
                               cid (intent "buy" cid []) then "buy_routed" else "buy_rejected") base
       | Monthly_trend.Hold when Option.fold ~none:false ~some:trend_owned entry -> note ticker "hold" base
       | Monthly_trend.Hold -> note ticker "abstain" (("reason",`String "Owned shares belong to another policy or manual entry")::base)
@@ -148,7 +149,7 @@ let run ()=
   let result=`Assoc ["asOf",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
     "pnl",`List pnl;
     "policy",`String Monthly_trend.policy;"mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
-    "sessionOpen",`Bool session;"entryUsd",`Float Multi_paper.entry_usd;
+    "sessionOpen",`Bool session;"entryUsd",`Float entry_usd;
     "routerInvocations",`Int !invoked;"symbols",`List (List.rev !report);"winProbability",`Null] in
   atomic (path "monthly-trend.json") result;
   print_endline (Yojson.Safe.to_string result)

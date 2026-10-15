@@ -88,10 +88,10 @@ class CryptoTrendRuntime(unittest.TestCase):
     def update(self, root, **changes):
         p = root/'broker.json'; d = json.loads(p.read_text()); d.update(changes); p.write_text(json.dumps(d))
 
-    def run_trend(self, root, armed=True, ok=True):
+    def run_trend(self, root, armed=True, ok=True, extra=None):
         env = {**os.environ, 'TZ': 'UTC', 'PATH': str(root)+':'+os.environ['PATH'], 'PAPER_STATE_DIR': str(root),
                'SYNTHETIC_DIR': str(root), 'APCA_API_KEY_ID': 'SYNTHETIC', 'APCA_API_SECRET_KEY': 'SYNTHETIC',
-               'PAPER_ORDERS': '1', 'CRYPTO_TREND_ORDERS': '1' if armed else '0'}
+               'PAPER_ORDERS': '1', 'CRYPTO_TREND_ORDERS': '1' if armed else '0', **(extra or {})}
         result = subprocess.run([str(ENGINE), '--execute'], env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode == 0, ok, result.stderr)
         return json.loads((root/'crypto-trend.json').read_text()) if ok else None
@@ -123,6 +123,14 @@ class CryptoTrendRuntime(unittest.TestCase):
             self.assertEqual(self.status(report), 'flat')
             self.assertEqual(len(self.posts(root)), 2)
             self.assertAlmostEqual(report['pnl']['fillCashFlowUsd'], 0.001662499 * 66000 - 0.001666666 * 60000, places=6)
+
+    def test_configured_entry_size(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory, 'up')
+            self.run_trend(root, ok=False, extra={'CRYPTO_TREND_ENTRY_USD': '9.5'})
+            self.assertEqual(self.posts(root), [])
+            self.assertEqual(self.run_trend(root, extra={'CRYPTO_TREND_ENTRY_USD': '300'})['entryUsd'], 300.0)
+            self.assertEqual(self.posts(root)[0]['qty'], '0.005000000')
 
     def test_observe_mode_never_posts(self):
         with tempfile.TemporaryDirectory() as directory:

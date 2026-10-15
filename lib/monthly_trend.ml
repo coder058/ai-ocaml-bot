@@ -114,6 +114,16 @@ let decide_monthly ~today bars =
         Ok { decision = (if last.close > average then Hold else Flat);
              month = key; last_date = last.date; close = last.close; average }
 
+(* SOURCE: user's $100 paper baseline and $500 per-order maximum. A larger
+   amount is an owner sizing choice, not something the backtest calibrated. *)
+let entry_usd variable =
+  match Sys.getenv_opt variable with
+  | None | Some "" -> Ok 100.
+  | Some text -> match float_of_string_opt text with
+    | Some value when Float.is_finite value && value >= 10. && value <= 500.
+        && Float.round (value *. 100.) = value *. 100. -> Ok value
+    | _ -> Error (variable ^ " must be whole cents between 10 and 500 USD")
+
 let client_id ~symbol ~month ~side ~origin =
   Stock_policy.client_id [symbol; month; side; origin; policy]
 

@@ -79,8 +79,8 @@ let utc_today ()=let t=Unix.gmtime (Unix.gettimeofday ()) in (t.tm_year+1900,t.t
 let trend_evidence ~orders ~ticker ~side ~cid ~exact evidence =
   if Sys.getenv_opt "TREND_AUTO_ORDERS"<>Some "1" then failwith "automatic trend paper gate is not armed";
   let reading=unwrap (Monthly_trend.verify_intent ~today:(utc_today ()) ~symbol:ticker ~side ~client_id:cid evidence) in
-  if side="buy" && exact<>unwrap (Exact_decimal.of_float Multi_paper.entry_usd) then
-    failwith "automatic trend entry must use the user baseline";
+  if side="buy" && exact<>unwrap (Exact_decimal.of_float (unwrap (Monthly_trend.entry_usd "TREND_ENTRY_USD"))) then
+    failwith "automatic trend entry must use the configured TREND_ENTRY_USD";
   if side="sell" then (
     let origin=get_string "originEntryId" evidence in
     match List.find_opt (fun row->get_string "symbol" row=ticker && get_string "side" row="buy") (List.rev orders) with

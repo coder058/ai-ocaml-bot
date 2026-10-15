@@ -54,6 +54,7 @@ let cash_flow rows=List.fold_left (fun total row->match field "broker" row with
     | None->total)
   | None->total) 0. rows
 let run ()=
+  let entry_usd=unwrap (Monthly_trend.entry_usd "CRYPTO_TREND_ENTRY_USD") in
   let now=Unix.gettimeofday () in
   let t=Unix.gmtime now in
   let today=(t.tm_year+1900,t.tm_mon+1,t.tm_mday) in
@@ -140,7 +141,7 @@ let run ()=
        else (match Execution_proof.Portfolio_cycle.entry_clear ~state_dir with
          | Error reason->note "abstain" (("reason",`String reason)::base)
          | Ok ()->
-           let notional=unwrap (Exact_decimal.of_float Multi_paper.entry_usd) in
+           let notional=unwrap (Exact_decimal.of_float entry_usd) in
            let ask=unwrap (Exact_decimal.of_float quote.ask) in
            let qty=unwrap (Exact_decimal.floor_grid (unwrap (Exact_decimal.ratio notional ask)) step) in
            let limit=Paper_crypto_broker.ceil_increment (quote.ask*.(1.+.Crypto_trend_broker.buffer)) asset.tick in
@@ -163,7 +164,7 @@ let run ()=
   let flow=cash_flow !rows in
   let marked=Exact_decimal.to_float held*.quote.bid in
   let result=`Assoc ["asOf",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
-    "policy",`String Monthly_trend.crypto_policy;"mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
+    "policy",`String Monthly_trend.crypto_policy;"entryUsd",`Float entry_usd;"mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
     "ownedQuantity",`String (Exact_decimal.to_string own);"brokerQuantity",`String (Exact_decimal.to_string broker_qty);
     "pnl",`Assoc ["fillCashFlowUsd",`Float flow;"heldMarkUsd",`Float marked;"netUsd",`Float (flow+.marked);
       "excludes",`String "USD sell fees posted after the trade day"];
