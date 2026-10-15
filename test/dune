@@ -71,3 +71,8 @@
  (libraries paper_market yojson)
  (deps fixtures/spx-trend-parity.json fixtures/btc-monthly-trend-parity.json)
  (action (run %{test} %{dep:fixtures/spx-trend-parity.json} %{dep:fixtures/btc-monthly-trend-parity.json})))
+
+(test
+ (name test_loss_guard)
+ (modules test_loss_guard)
+ (libraries paper_market unix))

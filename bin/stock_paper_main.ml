@@ -160,6 +160,7 @@ let run () =
           if Sys.getenv_opt "STOCK_AUTO_ORDERS"<>Some "1" then failwith "automatic stock paper gate is not armed";
           if side="buy" then (
             if Sys.getenv_opt "STOCK_AUTO_NEW_ENTRIES"<>Some "1" then failwith "automatic stock new entries are paused";
+            if not (Loss_guard.allows Loss_guard.candle_confluence) then failwith (Loss_guard.reason Loss_guard.candle_confluence);
             if exact<>unwrap (Exact_decimal.of_float Multi_paper.entry_usd) then failwith "automatic stock entry must use the user baseline";
             let document=Option.value ~default:`Null (field "analysis" evidence) in
             let signals=unwrap (Stock_policy.signals ~now:(Unix.gettimeofday ()) document) in

@@ -118,6 +118,8 @@ let try_order ?received_ns (previous : Paper_crypto.quote)
            | Paper_crypto.Buy ->
              if Sys.getenv_opt "BTC_LEGACY_NEW_ENTRIES"=Some "0" then
                (log "HOLD legacy BTC new entries disabled for multiframe handoff"; None)
+             else if not (Loss_guard.allows Loss_guard.quote_cross) then
+               (log "HOLD %s" (Loss_guard.reason Loss_guard.quote_cross); None)
              else
              let target = Paper_crypto.order_notional Paper_crypto.Experimental_baseline in
              let limit_price = ceil (current.ask /. tick) *. tick in

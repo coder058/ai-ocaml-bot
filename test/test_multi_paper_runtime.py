@@ -116,6 +116,9 @@ class RuntimeTests(unittest.TestCase):
             "MULTI_PAPER_NEW_ENTRIES": "1" if new_entries else "0",
             "MULTI_PAPER_WIND_DOWN_EXCLUDED": "1" if wind_down else "0",
             "MULTI_PAPER_INCLUDE_BTC": "1" if include_btc else "0",
+            # SOURCE: these tests exercise order mechanics, so they acknowledge
+            # the loss guard; test_loss_guard_blocks_entries covers its absence.
+            "ALLOW_NEGATIVE_EDGE_POLICY": "trend_candle_confluence_v1",
             "APCA_API_KEY_ID": "SYNTHETIC", "APCA_API_SECRET_KEY": "SYNTHETIC"}
         environment.update(extra_env or {})
         result = subprocess.run([str(ENGINE), "--execute"], env=environment,
@@ -268,6 +271,18 @@ class RuntimeTests(unittest.TestCase):
             self.run_engine(root, new_entries=False)
             self.assertEqual([p["side"] for p in self.posts(root)], ["buy", "sell"])
             self.assertEqual(self.run_engine(root, new_entries=False)["activeTickets"], [])
+
+    def test_loss_guard_blocks_entries_but_not_owned_exits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.setup_fixture(directory)
+            unguarded = {"ALLOW_NEGATIVE_EDGE_POLICY": ""}
+            self.assertFalse(self.run_engine(root, extra_env=unguarded)["newEntriesEnabled"])
+            self.assertEqual(self.posts(root), [])
+            self.run_engine(root)
+            self.assertEqual(len(self.posts(root)), 1)
+            self.update_broker(root, bid=89, ask=89.1)
+            self.run_engine(root, extra_env=unguarded)
+            self.assertEqual([p["side"] for p in self.posts(root)], ["buy", "sell"])
 
     def test_paused_entries_still_reconcile_uncertain_acceptance(self):
         with tempfile.TemporaryDirectory() as directory:

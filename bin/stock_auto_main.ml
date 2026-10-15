@@ -47,7 +47,8 @@ let run ()=
   let execute=Array.exists ((=) "--execute") Sys.argv in
   let armed=execute && Sys.getenv_opt "PAPER_ORDERS"=Some "1" &&
     Sys.getenv_opt "STOCK_PAPER_ORDERS"=Some "1" && Sys.getenv_opt "STOCK_AUTO_ORDERS"=Some "1" in
-  let new_entries=armed && Sys.getenv_opt "STOCK_AUTO_NEW_ENTRIES"=Some "1" in
+  let new_entries=armed && Sys.getenv_opt "STOCK_AUTO_NEW_ENTRIES"=Some "1" &&
+    Loss_guard.allows Loss_guard.candle_confluence in
   let document=try Yojson.Safe.from_file (path "market-pipeline.json") with _->`Null in
   let signals_result=Stock_policy.signals ~now document in
   let signals=match signals_result with Ok signals->signals|Error _->[] in

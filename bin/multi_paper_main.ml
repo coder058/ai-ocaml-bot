@@ -84,7 +84,8 @@ let run ~execute () =
   (* SOURCE: the user's revised research focus is equities, indices and FX.
      New crypto confluence entries require a separate explicit gate; exits and
      pending reconciliation retain their existing paper authority. *)
-  let entries_enabled = armed && Sys.getenv_opt "MULTI_PAPER_NEW_ENTRIES" = Some "1" in
+  let entries_enabled = armed && Sys.getenv_opt "MULTI_PAPER_NEW_ENTRIES" = Some "1" &&
+    Loss_guard.allows Loss_guard.candle_confluence in
   let entry_signals = if entries_enabled then signals else [] in
   let transmit (ticket : Multi_paper.ticket) (asset : Paper_crypto_broker.asset) =
     let pending = Option.get ticket.pending in

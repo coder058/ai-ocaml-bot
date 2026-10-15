@@ -37,7 +37,9 @@ class StockAutoRuntime(unittest.TestCase):
                 'APCA_API_KEY_ID': 'SYNTHETIC', 'APCA_API_SECRET_KEY': 'SYNTHETIC',
                 'PAPER_ORDERS': '1', 'STOCK_PAPER_ORDERS': '1',
                 'STOCK_AUTO_ORDERS': '1' if armed else '0',
-                'STOCK_AUTO_NEW_ENTRIES': '1' if entries else '0'}
+                'STOCK_AUTO_NEW_ENTRIES': '1' if entries else '0',
+                # SOURCE: mechanics tests acknowledge the loss guard explicitly.
+                'ALLOW_NEGATIVE_EDGE_POLICY': 'trend_candle_confluence_v1'}
 
     def run_auto(self, root, armed=True, entries=True, ok=True, extra_env=None):
         result = subprocess.run([str(ENGINE), '--execute'], env={**self.environment(root, armed, entries),**(extra_env or {})},
@@ -63,6 +65,19 @@ class StockAutoRuntime(unittest.TestCase):
             self.assertTrue(decisions[0]['detail']['nativeInputVerification']['verified'])
             self.assertEqual(decisions[1]['detail']['originEntryId'], decisions[0]['clientOrderId'])
             self.assertFalse(decisions[1]['detail']['preflight']['buyingPowerChecked'])
+
+    def test_loss_guard_blocks_entries_but_not_owned_exits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory); self.analysis(root)
+            self.run_auto(root, extra_env={'ALLOW_NEGATIVE_EDGE_POLICY': ''})
+            self.assertEqual(self.posts(root), [])
+            status = json.loads((root/'stock-auto.json').read_text())
+            self.assertFalse(status['newEntriesEnabled'])
+            self.run_auto(root)
+            self.assertEqual(len(self.posts(root)), 1)
+            self.update(root, bid=98, ask=99)
+            self.run_auto(root, entries=False, extra_env={'ALLOW_NEGATIVE_EDGE_POLICY': ''})
+            self.assertEqual([r['side'] for r in self.posts(root)], ['buy', 'sell'])
 
     def test_eleventh_stock_is_not_blocked_by_the_old_ten_position_guess(self):
         with tempfile.TemporaryDirectory() as directory:
