@@ -242,7 +242,7 @@ buy unless that variable is added.
 ### What it can plausibly earn (illustrative, not a forecast)
 
 Suppose you allocate $500 each to SPY, QQQ and BTC ($1,500 total). Applied to
-that, the holdout rates give about $34, $43 and $295 a year. The BTC figure comes
+that, the holdout rates give about $34, $44 and $295 a year. The BTC figure comes
 from a single 2021–24 window that included a large bull market. Expect years of
 much less, and drawdowns of 12–41% at the holdout's worst points. At the $100
 default this is pocket change. **The dollar outcome is mostly a sizing decision,

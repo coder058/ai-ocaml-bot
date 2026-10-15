@@ -26,6 +26,7 @@ from export_telemetry import (  # noqa: E402
     quote_audit_summary,
     stock_quote_audit_summary,
     service_state,
+    connection_state,
 )
 
 
@@ -209,6 +210,19 @@ class DecisionHistoryTests(unittest.TestCase):
         positions=public_positions([{"symbol":"QQQ","qty":"1"},{"symbol":"AAPL","qty":"100"},
                                    {"symbol":"NVDA","qty":"2"}],{"QQQ"})
         self.assertEqual([p["symbol"] for p in positions],["QQQ"])
+
+    def test_btc_trend_orders_are_lab_scoped_and_status_is_whitelisted(self):
+        rows=[{"id":"trend","client_order_id":"aibottrcExample","symbol":"BTC/USD","asset_class":"crypto"},
+              {"id":"wrong-asset","client_order_id":"aibottrcExample2","symbol":"ETH/USD","asset_class":"crypto"}]
+        with patch("export_telemetry.paper_get",return_value=rows):orders,complete,_=broker_orders({})
+        self.assertTrue(complete);self.assertEqual([r["id"] for r in orders],["trend"])
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            (root/"crypto-trend.json").write_text(json.dumps({"asOf":"2026-10-15T12:15:00Z","mode":"OBSERVE",
+                "pnl":{"netUsd":1.5},"privateLedger":"never exported"}))
+            with patch("export_telemetry.STATE_DIR",root):state=connection_state()
+        self.assertEqual(state["cryptoTrend"]["pnl"],{"netUsd":1.5})
+        self.assertNotIn("privateLedger",state["cryptoTrend"])
 
     def test_multicrypto_public_scope_still_excludes_private_positions(self):
         positions = [{"symbol": "ETHUSD", "qty": "1"}, {"symbol": "AAPL", "qty": "100"},

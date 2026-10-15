@@ -68,7 +68,7 @@ def lab_order(client_id: object, symbol: object) -> bool:
         return True
     return isinstance(client_id, str) and canonical is not None and (
         client_id.startswith("jsbotmtf") or
-        client_id.startswith("jsbotbtc") and canonical == "BTC/USD")
+        (client_id.startswith("jsbotbtc") or client_id.startswith("aibottrc")) and canonical == "BTC/USD")
 
 
 def stock_symbol(value: object) -> str | None:
@@ -560,6 +560,10 @@ def connection_state() -> dict:
         "nextOpen","automaticStrategy","executionGateArmed","canSubmitNow","feed","accountReady")),
         "stockAuto":("stock-auto.json",("asOf","mode","automaticStrategy","newEntriesEnabled","sessionOpen",
         "entryUsd","maxOpenPositions","eligibleLongSignals","routerInvocations","abstentions","ownedPositions","winProbability","stopHandling")),
+        "monthlyTrend":("monthly-trend.json",("asOf","policy","mode","sessionOpen","entryUsd",
+        "routerInvocations","symbols","pnl","winProbability")),
+        "cryptoTrend":("crypto-trend.json",("asOf","policy","mode","entryUsd","ownedQuantity",
+        "brokerQuantity","status","pnl","winProbability")),
         "stockStream":("stock-capture.json",("asOf","provider","product","feed","connected","symbols",
         "symbolLimit","quoteCount","barCount","orderAuthority","fullNbbo","lastMarketEventAt","reason","errorClass")),
         "fx":("fx-connection.json",("asOf","provider","product","connected","executionMode","automaticStrategy",

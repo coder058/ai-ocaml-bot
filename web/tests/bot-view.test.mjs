@@ -132,3 +132,12 @@ test("quote trigger evidence is visible only when the actual quote fields were r
     current_bid: "100.1", current_ask: "100.2", cross_direction: "up",
     trigger_move_bps: "10" }), null);
 });
+
+test("BTC month-end trend orders are lab orders only for BTC", () => {
+  const data = snapshot();
+  data.orders.push({ id: "trend", clientOrderId: "aibottrcexample", symbol: "BTC/USD", side: "buy", submittedAt: "2026-10-15T12:15:00Z" },
+    { id: "trend-eth", clientOrderId: "aibottrcother", symbol: "ETH/USD", side: "buy", submittedAt: "2026-10-15T12:15:00Z" });
+  const ids = botOrders(data).map((order) => order.id);
+  assert.ok(ids.includes("trend"));
+  assert.ok(!ids.includes("trend-eth"));
+});

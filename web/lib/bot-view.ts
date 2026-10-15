@@ -21,6 +21,7 @@ export type BotAccounting = {
 const botOrder = (id: string) =>
   id.startsWith("jsbotbtc") ||
   id.startsWith("jsbotmtf") ||
+  id.startsWith("aibottrc") ||
   id.startsWith("aibotstk");
 const btc = (symbol: string) => symbol === "BTCUSD" || symbol === "BTC/USD";
 export const cryptoSymbol = (symbol: string): string | null => {
