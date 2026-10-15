@@ -32,3 +32,8 @@
  (name monthly_trend_main)
  (modules monthly_trend_main)
  (libraries paper_market yojson unix))
+
+(executable
+ (name crypto_trend_main)
+ (modules crypto_trend_main)
+ (libraries paper_market execution_proof yojson unix))

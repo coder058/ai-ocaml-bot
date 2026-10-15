@@ -69,5 +69,5 @@
  (name test_monthly_trend)
  (modules test_monthly_trend)
  (libraries paper_market yojson)
- (deps fixtures/spx-trend-parity.json)
- (action (run %{test} %{dep:fixtures/spx-trend-parity.json})))
+ (deps fixtures/spx-trend-parity.json fixtures/btc-monthly-trend-parity.json)
+ (action (run %{test} %{dep:fixtures/spx-trend-parity.json} %{dep:fixtures/btc-monthly-trend-parity.json})))

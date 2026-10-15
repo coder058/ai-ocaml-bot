@@ -41,5 +41,15 @@ let entry_clear ~state_dir =
       | Some ticket -> Error ("Unresolved owned crypto order blocks new exposure: " ^
           (Option.get ticket.pending).client_id)
       | None -> Ok ()) in
+  let trend document =
+    let field=Paper_market.Paper_broker.member in
+    match field "orders" document with
+    | Some (`List rows) ->
+      (match List.find_opt (fun row->Paper_market.Paper_broker.string (field "state" row)=Some "pending") rows with
+       | Some row -> Error ("Unresolved crypto trend order blocks new exposure: " ^
+           Option.value ~default:"" (Paper_market.Paper_broker.string (field "clientOrderId" row)))
+       | None -> Ok ())
+    | _ -> Error "Crypto trend ledger schema invalid; new exposure blocked" in
   Result.bind (read "stock-paper-ledger.json" stock) (fun () ->
-    read "multi-paper-ledger.json" crypto)
+    Result.bind (read "multi-paper-ledger.json" crypto) (fun () ->
+      read Paper_market.Crypto_trend_broker.ledger_name trend))

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the BTC month-end trend executor daily
+
+[Timer]
+# SOURCE: crypto trades every day. 12:15 UTC is after the executor's 12:00 UTC
+# wait on the 1st; daily runs reconcile and retry unfilled IOC attempts.
+OnCalendar=*-*-* 12:15:00
+Persistent=true
+Unit=ai-ocaml-crypto-trend.service
+
+[Install]
+WantedBy=timers.target

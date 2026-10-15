@@ -59,4 +59,28 @@ let ()=
   if Result.is_error (Monthly_trend.verify_intent ~today ~symbol:"SPY" ~side:"sell" ~client_id:exit_cid exit_intent) then
     fail "valid trend exit rejected";
   if String.length cid<>40 || not (String.starts_with ~prefix:"aibotstk" cid) then fail "client ID outside router namespace";
+  (* BTC ten-month variant: parity on 144 real monthly closes 2013-2024. *)
+  let btc=Yojson.Safe.from_file Sys.argv.(2) in
+  let btc_bars=Result.get_ok (Monthly_trend.bars_of_json (Option.get (Paper_broker.member "bars" btc))) in
+  let btc_checked=ref 0 in
+  (match Paper_broker.member "expected" btc with
+   | Some (`List rows)->List.iter (fun row->
+       let text name=Option.get (Paper_broker.string (Paper_broker.member name row)) in
+       let today=Option.get (Monthly_trend.parse_date (text "today")) in
+       match Monthly_trend.decide_monthly ~today btc_bars with
+       | Error e->fail ("BTC parity month rejected: " ^ e)
+       | Ok r->
+         if r.month<>text "month" then fail "BTC parity month differs";
+         if (r.decision=Monthly_trend.Hold)<>(Paper_broker.member "hold" row=Some (`Bool true)) then
+           fail ("BTC parity decision differs for " ^ r.month);
+         incr btc_checked) rows
+   | _->fail "BTC fixture has no expectations");
+  if !btc_checked<>144 then fail "expected 144 BTC parity months";
+  let daily=synthetic 305 (fun i->100.+.float_of_int i) in
+  (match Monthly_trend.decide_monthly ~today daily with Ok {decision=Hold;month="2025-10";_}->() | _->fail "rising daily crypto must hold");
+  let expect_monthly_error name bars=match Monthly_trend.decide_monthly ~today bars with Error _->() | Ok _->fail name in
+  expect_monthly_error "crypto month without final day accepted" (List.filter (fun (b:Monthly_trend.bar)->b.date<>"2025-06-30") daily);
+  expect_monthly_error "crypto stale month accepted" (List.filteri (fun i _->i<290) daily);
+  expect_monthly_error "crypto short history accepted" (List.filteri (fun i _->i>40) daily);
+  print_endline "BTC ten-month parity (144 real month ends) and fail-closed checks passed";
   print_endline "monthly trend parity (24 real S&P 500 month ends) and fail-closed checks passed"

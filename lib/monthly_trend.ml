@@ -42,7 +42,7 @@ let day_number (y, m, d) =
 let month_key (y, m, _) = Printf.sprintf "%04d-%02d" y m
 let previous_month (y, m, _) = if m = 1 then (y - 1, 12, 1) else (y, m - 1, 1)
 
-let decide ~today bars =
+let validated bars =
   let parsed = List.map (fun bar -> parse_date bar.date, bar) bars in
   if List.exists (fun (date, (bar : bar)) -> date = None || not (Float.is_finite bar.close) || bar.close <= 0.) parsed then
     Error "daily bar has an invalid date or close"
@@ -51,8 +51,12 @@ let decide ~today bars =
     let rec increasing = function
       | (a, _) :: ((b, _) :: _ as rest) -> day_number a < day_number b && increasing rest
       | _ -> true in
-    if not (increasing parsed) then Error "daily bars are not strictly increasing"
-    else
+    if not (increasing parsed) then Error "daily bars are not strictly increasing" else Ok parsed
+
+let decide ~today bars =
+  match validated bars with
+  | Error _ as error -> error
+  | Ok parsed ->
       let current = month_key today in
       let completed = List.filter (fun (date, _) -> month_key date < current) parsed in
       let window = List.filteri (fun i _ -> i >= List.length completed - lookback) completed in
@@ -76,6 +80,40 @@ let decide ~today bars =
             Ok { decision = (if last.close > average then Hold else Flat);
                  month = month_key last_date; last_date = last.date; close = last.close; average }
 
+(* 24/7 crypto variant: hold when the last completed month's close is above the
+   mean of the last ten calendar-month closes (the `sma_trend` rule evaluated on
+   BTC monthly bars in research/cost_aware_backtest.py). Each month's close is
+   its final UTC daily bar, which must fall on the month's last day. *)
+let crypto_policy = "crypto_monthly_trend_v1"
+let months = 10
+let decide_monthly ~today bars =
+  match validated bars with
+  | Error _ as error -> error
+  | Ok parsed ->
+    let current = month_key today in
+    let completed = List.filter (fun (date, _) -> month_key date < current) parsed in
+    let closes = List.rev (List.fold_left (fun acc ((y, m, d), bar) -> match acc with
+      | ((key, _, _) :: rest) when key = month_key (y, m, d) -> (key, (y, m, d), bar) :: rest
+      | _ -> (month_key (y, m, d), (y, m, d), bar) :: acc) [] completed) in
+    let window = List.filteri (fun i _ -> i >= List.length closes - months) closes in
+    let rec consecutive = function
+      | (_, a, _) :: ((_, b, _) :: _ as rest) ->
+        let (ay, am, _) = a and (by, bm, _) = b in
+        (if am = 12 then (ay + 1, 1) else (ay, am + 1)) = (by, bm) && consecutive rest
+      | _ -> true in
+    let month_end (_, (y, m, d), _) = d = days_in_month y m in
+    match List.rev window with
+    | [] -> Error "no completed-month daily bars"
+    | (key, _, (last : bar)) :: _ ->
+      if key <> month_key (previous_month today) then Error "latest completed month is missing; data are stale"
+      else if List.length window < months then Error "insufficient monthly history for the ten-month average"
+      else if not (List.for_all month_end window) then Error "a month's final daily close is missing"
+      else if not (consecutive window) then Error "monthly closes are not consecutive"
+      else
+        let average = List.fold_left (fun sum (_, _, (bar : bar)) -> sum +. bar.close) 0. window /. float_of_int months in
+        Ok { decision = (if last.close > average then Hold else Flat);
+             month = key; last_date = last.date; close = last.close; average }
+
 let client_id ~symbol ~month ~side ~origin =
   Stock_policy.client_id [symbol; month; side; origin; policy]
 
@@ -92,7 +130,7 @@ let bars_of_json = function
 
 let reading_to_json r =
   `Assoc ["decision", `String (if r.decision = Hold then "hold" else "flat"); "month", `String r.month;
-          "lastSession", `String r.last_date; "close", `Float r.close; "average200", `Float r.average]
+          "lastSession", `String r.last_date; "close", `Float r.close; "average", `Float r.average]
 
 (* Recompute the decision from the intent's own retained bars, so a stale or
    edited intent cannot submit an order the rule would not make today. *)

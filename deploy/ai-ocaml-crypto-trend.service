@@ -1,0 +1,23 @@
+[Unit]
+Description=AI OCaml Bot BTC/USD month-end trend (crypto_monthly_trend_v1) paper executor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=TZ=UTC
+Environment=PAPER_STATE_DIR=/home/ubuntu/jsbot-paper-state
+# SOURCE: observation by default. Orders need --execute plus PAPER_ORDERS=1 and
+# CRYPTO_TREND_ORDERS=1 (see the -paper.conf drop-in). Keep the legacy BTC
+# quote-cross service and MULTI_PAPER_INCLUDE_BTC off; this executor refuses
+# to buy while either owns BTC, but they do not know about it.
+Environment=CRYPTO_TREND_ORDERS=0
+EnvironmentFile=/etc/jsbot-paper.env
+WorkingDirectory=/home/ubuntu/ocaml-paper-market-lab
+ExecStart=/home/ubuntu/ocaml-paper-market-lab/_build/default/bin/crypto_trend_main.exe
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/jsbot-paper-state
