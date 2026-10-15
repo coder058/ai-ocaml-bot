@@ -65,12 +65,18 @@ class MonthlyTrendRuntime(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = self.fixture(directory, 'up')
             self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'buy_routed')
-            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'hold')
+            held = self.run_trend(root)
+            self.assertEqual(held['symbols'][0]['status'], 'hold')
+            self.assertAlmostEqual(held['pnl'][0]['netUsd'], -100 + 99.5)  # one share marked at the 99.5 bid
             self.assertEqual([p['side'] for p in self.posts(root)], ['buy'])
             self.assertEqual(self.posts(root)[0]['notional'], '100.000000000')
             self.set_bars(root, 'down')
             self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'sell_routed')
-            self.assertEqual(self.run_trend(root)['symbols'][0]['status'], 'flat')
+            report = self.run_trend(root)
+            self.assertEqual(report['symbols'][0]['status'], 'flat')
+            # Synthetic fills: bought 1 share at 100, sold 1 at 100; flat, so net is the cash flow.
+            self.assertEqual(report['pnl'][0]['ownedShares'], 0.0)
+            self.assertAlmostEqual(report['pnl'][0]['netUsd'], 0.0)
             self.assertEqual([p['side'] for p in self.posts(root)], ['buy', 'sell'])
             self.assertEqual(self.posts(root)[1]['qty'], '1.000000000')
             # Same month turning up again cannot re-enter with the used entry identity.

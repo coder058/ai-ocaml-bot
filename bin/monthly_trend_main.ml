@@ -129,7 +129,24 @@ let run ()=
                                  (intent "sell" cid ["originEntryId",`String origin]) then "sell_routed" else "sell_rejected") base
          | _->note ticker "abstain" (("reason",`String "Owned shares belong to another policy or manual entry")::base))
   ) symbols;
+  (* Paper P&L for this policy's own fills only: fill cash flow plus owned
+     shares at the latest IEX bid. Regulatory sell fees are not included. *)
+  let trend_rows=List.filter trend_owned !rows in
+  let quotes=match Paper_stock_broker.quotes symbols with Ok doc->Some doc | Error _->None in
+  let pnl=List.map (fun ticker->
+    let mine=List.filter (fun row->text "symbol" row=ticker) trend_rows in
+    let flow=List.fold_left (fun total row->match field "broker" row with
+      | Some broker->(match Paper_broker.float (field "filled_qty" broker),Paper_broker.float (field "filled_avg_price" broker) with
+        | Some qty,Some price->if text "side" row="buy" then total-.qty*.price else total+.qty*.price
+        | _->total)
+      | None->total) 0. mine in
+    let qty=Exact_decimal.to_float (owned ticker mine) in
+    let bid=Option.bind quotes (fun doc->Paper_broker.float (Option.bind (Option.bind (field "quotes" doc) (field ticker)) (field "bp"))) in
+    `Assoc ["symbol",`String ticker;"fillCashFlowUsd",`Float flow;"ownedShares",`Float qty;
+      "markBid",(match bid with Some b->`Float b | None->`Null);
+      "netUsd",(match bid with Some b->`Float (flow+.qty*.b) | None when qty=0.->`Float flow | None->`Null)]) symbols in
   let result=`Assoc ["asOf",`String (Multi_paper.observed_stamp (Unix.gettimeofday ()));
+    "pnl",`List pnl;
     "policy",`String Monthly_trend.policy;"mode",`String (if armed then "PAPER_EXPERIMENT" else "OBSERVE");
     "sessionOpen",`Bool session;"entryUsd",`Float Multi_paper.entry_usd;
     "routerInvocations",`Int !invoked;"symbols",`List (List.rev !report);"winProbability",`Null] in
