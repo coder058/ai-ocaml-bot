@@ -350,3 +350,22 @@ Paper execution is simulated and cannot demonstrate live profitability.
   27 bps/side +59% (+34%). Max drawdown was lower or equal in every case.
 - **Decision:** implement in OCaml behind the serialized stock router, gated by
   `TREND_AUTO_ORDERS=1`. Simulated index results are not live profitability.
+
+## `crypto_monthly_trend_v1` — BTC/USD, observe until armed
+
+- **Rule:** hold BTC/USD when the last completed month's close is above the
+  mean of the last ten month-end closes. This is the `sma_trend` rule on the
+  BTC monthly series in the cost-aware screen.
+- **Evidence:** holdout 2021–24 at 27 bps per side: +59%/yr versus +34%
+  buy-and-hold, max drawdown −41% versus −73%. That is 48 months; one window
+  is not statistical proof.
+- **Decision:** a dedicated executor behind `CRYPTO_TREND_ORDERS=1`, with OCaml
+  parity on 144 real month ends. See [the profitability review](PROFITABILITY-REVIEW.md#7-second-session--15-october-2026).
+
+## `monthly_trend_v1` — robustness, pre-registered
+
+The unchanged rule passed both pre-registered tests in
+[TREND-ROBUSTNESS](TREND-ROBUSTNESS.md): it was profitable with a smaller
+drawdown on unseen MSFT, GOOG and WTI data, and the next-session lag cost 0.45
+points a year. It trails buy-and-hold on single stocks in bull runs, so it
+stays limited to index ETFs.

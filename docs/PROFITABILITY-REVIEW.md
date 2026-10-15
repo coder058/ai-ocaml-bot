@@ -194,21 +194,80 @@ python research/cost_aware_backtest.py --folds holdout   # already opened; do no
 - `deploy/ai-ocaml-monthly-trend.{service,timer}`: weekdays at 15:05 UTC, in
   **observe mode**. The `-paper.conf` drop-in arms it.
 
-## 7. Turning it on (owner decision)
+## 7. Second session — 15 October 2026
 
-The VPS services were deliberately stopped on 5 October, and this change does
-not restart anything. To run the new rule on Alpaca paper:
+**Robustness, pre-registered before running** ([TREND-ROBUSTNESS](TREND-ROBUSTNESS.md),
+commit `39e5df5`):
 
-1. Deploy a build of this commit to the VPS and run `dune runtest`.
-2. Install `deploy/ai-ocaml-monthly-trend.service` and `.timer`. Run in observe
-   mode for at least one session and check `monthly-trend.json`.
-3. Install the `-paper.conf` drop-in to arm it.
-4. Keep `jsbot-paper.service` (`quote_cross_30s_v1`) and the crypto multi-paper
-   entries **off**. They are measured negative after fees.
-5. Judge it on reconciled paper fills over months, not days. One trade a year
-   per symbol means a reliable verdict takes years. The historical test is the
-   main evidence until then.
+- **Unseen data:** the unchanged rule was profitable on MSFT 1986–2017
+  (+17.1%/yr), GOOG 2004–13 (+11.8%) and WTI oil 1986–2019 (+5.1%), with a
+  smaller drawdown than buy-and-hold every time.
+- **Single stocks:** in long bull runs it trailed buy-and-hold by a lot. Use it
+  on broad index ETFs only.
+- **Execution lag:** trading one session after the month-end decision, as the
+  live scheduler does, costs a median 0.45 points a year.
 
-Not done, and possible next steps: BTC through the crypto adapter (validated in
-the screen, but it needs the crypto ownership path); position sizing beyond the
-$100 baseline; and the reconciled per-strategy P&L ledger.
+**BTC is now wired.** `crypto_monthly_trend_v1` (`bin/crypto_trend_main.ml`)
+holds BTC/USD when the last month-end close is above the mean of ten month-end
+closes. This is exactly the rule validated on BTC; the OCaml decision matches
+the backtest on 144 real month ends. The executor:
+
+- keeps its own durable ledger and `aibottrc` order IDs,
+- writes each IOC request to disk before sending it, and makes at most three
+  attempts per side per month,
+- sells only the fee-reduced quantity it actually owns,
+- refuses to buy while the legacy or multi-frame executors hold or have pending
+  BTC,
+- joins the shared portfolio lock.
+
+It ships in observe mode behind `CRYPTO_TREND_ORDERS=1`.
+
+**Losing policies need explicit acknowledgement.** New buys under
+`quote_cross_30s_v1` or `trend_candle_confluence_v1` (legacy BTC, crypto
+multi-frame, stock scheduler and stock router) now require
+`ALLOW_NEGATIVE_EDGE_POLICY=<policy>`. Exits are unaffected. The existing
+`ai-ocaml-stock-paper-paper.conf` and multi-paper drop-ins therefore no longer
+buy unless that variable is added.
+
+**Other changes:**
+
+- Per-policy paper P&L is written to `monthly-trend.json` and
+  `crypto-trend.json`.
+- Position size is configurable: `TREND_ENTRY_USD` and
+  `CRYPTO_TREND_ENTRY_USD`, default $100, whole cents from $10 to $500. The
+  router enforces the same value.
+- A request still not found at the broker 10 minutes after sending is released
+  as rejected instead of blocking every strategy forever.
+
+### What it can plausibly earn (illustrative, not a forecast)
+
+Suppose you allocate $500 each to SPY, QQQ and BTC ($1,500 total). Applied to
+that, the holdout rates give about $34, $43 and $295 a year. The BTC figure comes
+from a single 2021–24 window that included a large bull market. Expect years of
+much less, and drawdowns of 12–41% at the holdout's worst points. At the $100
+default this is pocket change. **The dollar outcome is mostly a sizing decision,
+which is yours.**
+
+## 8. Turning it on (owner decision)
+
+The VPS services were deliberately stopped on 5 October, and nothing here
+restarts them. To run the trend rules on Alpaca paper:
+
+1. Deploy a build of the branch to the VPS and run `dune runtest`.
+2. Keep `jsbot-paper.service` (`quote_cross_30s_v1`) stopped, keep
+   `MULTI_PAPER_INCLUDE_BTC` unset, and do not set
+   `ALLOW_NEGATIVE_EDGE_POLICY`.
+3. Install `deploy/ai-ocaml-monthly-trend.{service,timer}` (ETFs, weekdays at
+   15:05 UTC) and `deploy/ai-ocaml-crypto-trend.{service,timer}` (BTC, daily at
+   12:15 UTC). Leave them in observe mode for at least one run. Check
+   `monthly-trend.json` and `crypto-trend.json`: each should show a decision
+   with no `abstain` caused by data errors.
+4. Optionally set `TREND_ENTRY_USD` and `CRYPTO_TREND_ENTRY_USD` (≤ $500).
+5. Install the `-paper.conf` drop-ins to arm them.
+6. Judge the result on reconciled paper fills over months and years. These
+   rules trade about once a year per symbol.
+
+Still not done: resting broker-side stops (the monthly rule doesn't need them);
+diversifying into bond or gold ETFs, which needs price history that isn't
+available offline; and live (non-paper) trading, which this code cannot do by
+design.

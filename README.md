@@ -9,7 +9,10 @@ Retained behavior below describes the historical implementation; see the
 their measured gross moves (about 0.1–5 bps) cannot clear the ≈50 bps crypto
 round-trip cost. A month-end ETF trend rule (`monthly_trend_v1`) passed a frozen
 develop/validate/holdout screen after costs and is implemented behind the paper
-router in observe mode. See [the profitability review](docs/PROFITABILITY-REVIEW.md).
+router in observe mode. A BTC/USD month-end trend executor followed on 15
+October. It passed pre-registered tests on unseen MSFT, GOOG and oil data, and
+policies measured negative after fees now need explicit acknowledgement before
+buying. See [the profitability review](docs/PROFITABILITY-REVIEW.md).
 
 An auditable live market monitor and **Alpaca paper-only** execution experiment,
 written in OCaml. This is an independent portfolio project, not affiliated with
