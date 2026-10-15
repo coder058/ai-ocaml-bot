@@ -180,6 +180,19 @@ class CryptoTrendRuntime(unittest.TestCase):
             self.assertEqual(self.status(self.run_trend(root)), 'abstain')
             self.assertEqual(len(self.posts(root)), 1)
 
+    def test_never_accepted_request_is_released_after_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.fixture(directory, 'up', unknown_before=True)
+            self.run_trend(root)
+            p = root/'crypto-trend-ledger.json'; ledger = json.loads(p.read_text())
+            ledger['orders'][0]['sentAt'] = '2020-01-01T00:00:00.000000Z'
+            p.write_text(json.dumps(ledger))
+            self.update(root, unknown_before=False)
+            self.assertEqual(self.status(self.run_trend(root)), 'buy_routed')
+            ledger = json.loads(p.read_text())['orders']
+            self.assertEqual([r['state'] for r in ledger], ['rejected', 'resolved'])
+            self.assertIn('Not found at broker after timeout', ledger[0]['brokerError'])
+
     def test_rejection_is_recorded(self):
         with tempfile.TemporaryDirectory() as directory:
             root = self.fixture(directory, 'up', reject=True)

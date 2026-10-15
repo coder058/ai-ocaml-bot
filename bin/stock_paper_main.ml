@@ -113,6 +113,14 @@ let run () =
     if get_string "state" row<>"pending" then row else
     let cid=get_string "clientOrderId" row in
     match Paper_broker.order_by_client_id cid with
+    | Error error when String.starts_with ~prefix:"HTTP 404:" error &&
+        (match Stock_policy.timestamp (get_string "sentAt" row) with
+         | Some sent->Unix.gettimeofday ()-.sent>600. | None->false) ->
+      (* SOURCE: an accepted DAY order is always retrievable by client ID; not
+         found ten minutes after the request (UNCALIBRATED GUESS) means it never
+         reached the broker. Bounded release instead of a permanent block. *)
+      journal "NOT_ACCEPTED" (get_string "symbol" row) cid "request never reached the broker" (`String error);
+      replace "brokerError" (`String ("Not found at broker after timeout: " ^ error)) (replace "state" (`String "rejected") row)
     | Error error -> journal "LOOKUP_UNCERTAIN" (get_string "symbol" row) cid "pending order retained" (`String error);row
     | Ok broker ->
       validate_broker row broker;

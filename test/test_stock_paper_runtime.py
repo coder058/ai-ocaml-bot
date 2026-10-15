@@ -113,6 +113,13 @@ class StockRuntime(unittest.TestCase):
             r=self.fixture(d,unknown_before=True);self.buy(r);self.buy(r)
             self.assertEqual(len(self.posts(r)),1)
             self.assertEqual(json.loads((r/'stock-paper-ledger.json').read_text())['orders'][0]['state'],'pending')
+    def test_never_accepted_request_is_released_after_timeout(self):
+        with tempfile.TemporaryDirectory() as d:
+            r=self.fixture(d,unknown_before=True);self.buy(r)
+            p=r/'stock-paper-ledger.json';ledger=json.loads(p.read_text())
+            ledger['orders'][0]['sentAt']='2020-01-01T00:00:00.000000Z';p.write_text(json.dumps(ledger))
+            self.run_router(r)
+            self.assertEqual(json.loads(p.read_text())['orders'][0]['state'],'rejected')
     def test_closed_session_disarmed_and_unowned_position(self):
         for state,armed in [({'open':False},True),({},False),({'position':'1'},True),({'open_orders':[{'symbol':'QQQ'}]},True)]:
             with self.subTest(state=state),tempfile.TemporaryDirectory() as d:

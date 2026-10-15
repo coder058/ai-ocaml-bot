@@ -53,6 +53,9 @@ let cash_flow rows=List.fold_left (fun total row->match field "broker" row with
       if text "side" row="buy" then total-.value else total+.value
     | None->total)
   | None->total) 0. rows
+(* SOURCE: ten minutes is far beyond an IOC lifetime and Alpaca's request
+   timeouts; UNCALIBRATED GUESS for bounded recovery of never-accepted requests. *)
+let unaccepted_after_seconds=600.
 let run ()=
   let entry_usd=unwrap (Monthly_trend.entry_usd "CRYPTO_TREND_ENTRY_USD") in
   let now=Unix.gettimeofday () in
@@ -73,6 +76,13 @@ let run ()=
   rows:=List.map (fun row->
     if text "state" row<>"pending" then row else
     match Paper_broker.order_by_client_id (text "clientOrderId" row) with
+    | Error error when String.starts_with ~prefix:"HTTP 404:" error &&
+        (match Stock_policy.timestamp (text "sentAt" row) with
+         | Some sent->now-.sent>unaccepted_after_seconds | None->false) ->
+      (* An accepted IOC order is always retrievable by client ID; still not
+         found long after the request means it never reached the broker. *)
+      journal "NOT_ACCEPTED" (text "clientOrderId" row) (`String error);
+      replace "brokerError" (`String ("Not found at broker after timeout: " ^ error)) (replace "state" (`String "rejected") row)
     | Error error->journal "LOOKUP_UNCERTAIN" (text "clientOrderId" row) (`String error);row
     | Ok broker->validate_broker row broker;
       replace "state" (`String (if terminal broker then "resolved" else "pending")) (replace "broker" broker row)) !rows;
@@ -85,13 +95,15 @@ let run ()=
   let minimum=unwrap (Exact_decimal.of_float asset.minimum) in
   let broker_qty=unwrap (Paper_crypto_broker.quantity_exact Crypto_trend_broker.symbol
     (unwrap (Paper_crypto_broker.positions ()))) in
-  let quote=unwrap (Paper_crypto_broker.quote Crypto_trend_broker.symbol) in
   let (y,m,_)=today in
   let start=Printf.sprintf "%04d-%02d-01" (y-1) m in
   let reading=match Crypto_trend_broker.daily_bars ~start with
     | Error e->Error e
     | Ok bars->if t.tm_mday=1 && t.tm_hour<12 then Error "Month-end daily bar may still be open before 12:00 UTC on the 1st"
       else Result.map (fun r->r,bars) (Monthly_trend.decide_monthly ~today bars) in
+  (* Read the quote after the bar download so its five-second freshness window
+     is spent on the decision, not on network I/O. *)
+  let quote=unwrap (Paper_crypto_broker.quote Crypto_trend_broker.symbol) in
   (* Fee debits can only lower broker BTC below own fills; anything above own
      fills plus dust belongs to another owner and blocks new exposure. *)
   let external_qty=if broker_qty>own then Int64.sub broker_qty own else Exact_decimal.zero in
