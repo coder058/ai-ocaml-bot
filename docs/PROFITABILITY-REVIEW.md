@@ -31,8 +31,8 @@ measured these gross moves for its signals:
 
 The signals needed edges about 100 times larger than anything measured. More
 symbols, more frames, faster execution or better audit trails cannot fix that.
-The 4 October snapshot showed about −$205 of provisional marked loss on
-1,660 lab orders.
+The 4 October snapshot showed about −$205 of provisional marked loss, with
+1,660 lab orders that had fills. See [the trade audit](TRADE-AUDIT-2026-10-17.md).
 
 Contributing causes:
 

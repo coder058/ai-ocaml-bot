@@ -5,3 +5,4 @@ _build/
 *.opam
 __pycache__/
 .local/
+trade-audit*/
