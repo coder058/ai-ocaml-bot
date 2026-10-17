@@ -120,3 +120,26 @@ sudo python3 research/trade_audit.py --env /etc/jsbot-paper.env \
 snapshot is saved as `raw/broker-snapshot.json`, mode 600. It is private
 account data: do not commit it. Re-run the analysis offline with
 `--snapshot /home/ubuntu/trade-audit/raw`.
+
+## 7. Size, turnover and fees (estimated from recorded totals)
+
+Derived on 17 Oct from the recorded figures above, not from raw broker rows.
+`research/trade_audit.py` gives exact values.
+
+- **Bet size:** buys targeted $100 each, and BTC exposure was capped at
+  $500. IOC orders often filled only partly, so actual fills were small. On
+  28 Sep, 422 fills totalled $8,483 of buys and sells, about **$20 per fill**.
+- **Most capital at risk at once:** about $1,500 by design ($500 BTC plus ten
+  $100 multi-frame tickets). Open positions on 4 Oct were marked at $101.19.
+- **Turnover:** USD fees are charged on sells at 25 bps. Posted USD fees of
+  $93.56 imply about **$37,000 of sells**, and so roughly **$75,000 of total
+  buys plus sells**. That is about $22 per fill row and $45 per filled order,
+  consistent with the 28 Sep sample.
+- **Fees vs. loss:** buy fees are charged in the received coin and on
+  29 Sep matched the USD sell fees ($25.76 vs. ≈$24 of BTC). Total fees by
+  4 Oct were therefore about **$185–190 of the $203 loss (≈ 92%)**. Spread
+  and slippage account for roughly the remaining $15–20.
+- **Loss path:** −$1.44 (27 Sep, flat) → −$10.86 gross (28 Sep) → −$51.86
+  provisional (29 Sep 12:31) → −$203.08 (4 Oct 15:50).
+- **Return:** about −0.27% of turnover, about −0.12 dollars per filled order,
+  or about −13.5% of the most capital at risk at once.
